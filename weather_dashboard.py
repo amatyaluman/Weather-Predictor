@@ -1,7 +1,8 @@
+# weather_dashboard.py
 import pandas as pd
 import streamlit as st
 import joblib
-from datetime import datetime, timedelta
+from datetime import datetime
 import numpy as np
 import plotly.express as px
 import os
@@ -19,15 +20,6 @@ def load_css():
     if os.path.exists("styles.css"):
         with open("styles.css") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-        <style>
-            body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; }
-            .current-weather { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-            .hour-card { background: #1e293b; border-radius: 8px; padding: 12px; margin: 8px; text-align: center; }
-        </style>
-        """, unsafe_allow_html=True)
 
 load_css()
 
@@ -44,8 +36,10 @@ def load_model():
 def load_historical_data():
     try:
         df = pd.read_csv("open-meteo-27.73N85.25E1293m.csv")
-        required_cols = ['time', 'temperature_2m', 'relative_humidity_2m', 
-                        'wind_speed_10m (km/h)', 'wind_direction_100m', 'weather_code']
+        required_cols = [
+            'time', 'temperature_2m', 'relative_humidity_2m', 
+            'wind_speed_10m (km/h)', 'wind_direction_100m', 'weather_code'
+        ]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             st.error(f"Missing columns: {missing_cols}")
@@ -120,16 +114,21 @@ def generate_hourly_forecast(date):
         for feature in set(model.feature_names_in_) - set(input_df.columns):
             input_df[feature] = 0
             
-        temp = round(model.predict(input_df[model.feature_names_in_])[0], 1)
+        pred = model.predict(input_df[model.feature_names_in_])
+        temp = round(float(pred[0, 0]) if pred.ndim > 1 else float(pred[0]), 1)
+        
+        humidity = float(input_df.get('relative_humidity_2m', [median_values['relative_humidity_2m']])[0])
+        wind_speed = float(input_df.get('wind_speed_10m (km/h)', [median_values['wind_speed_10m (km/h)']])[0])
+        wind_direction = float(input_df.get('wind_direction_100m', [median_values['wind_direction_100m']])[0])
         
         forecasts.append({
             'hour': hour,
             'time': f"{hour:02d}:00",
             'temperature': temp,
             'weather_code': common_weather if 'common_weather' in locals() else 0,
-            'humidity': input_df['relative_humidity_2m'].values[0],
-            'wind_speed': input_df['wind_speed_10m (km/h)'].values[0],
-            'wind_direction': input_df['wind_direction_100m'].values[0]
+            'humidity': humidity,
+            'wind_speed': wind_speed,
+            'wind_direction': wind_direction
         })
     
     return forecasts
