@@ -26,10 +26,10 @@ body {
 }
 
 .stTabs [role="tab"]:hover {
-  color: #facc15;
+  color: #badbf1;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) {s
   .hour-card {
     font-size: 0.8rem;
     padding: 8px;
