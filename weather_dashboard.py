@@ -10,7 +10,7 @@ import os
 st.set_page_config(
     page_title="Weather Forecast Dashboard",
     layout="wide",
-    page_icon="⛅",
+    page_icon="logo.png",  # <-- use your logo file here
     initial_sidebar_state="expanded"
 )
 
