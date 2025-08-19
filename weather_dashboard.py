@@ -1,4 +1,3 @@
-# weather_dashboard.py
 import pandas as pd
 import streamlit as st
 import joblib
@@ -17,6 +16,11 @@ st.set_page_config(
 
 # -------------------- STYLES --------------------
 def load_css():
+    st.markdown("""
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    """, unsafe_allow_html=True)
+
     if os.path.exists("styles.css"):
         with open("styles.css") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -67,15 +71,28 @@ model = load_model()
 df = load_historical_data()
 
 # -------------------- UTILITIES --------------------
-def get_weather_icon(code):
-    icons = {
-        0: "wb_sunny", 1: "partly_cloudy_day", 2: "cloud", 3: "cloudy",
-        45: "foggy", 48: "foggy", 51: "rainy", 53: "rainy", 55: "rainy",
-        61: "rainy", 63: "rainy", 65: "rainy", 71: "ac_unit", 
-        73: "ac_unit", 75: "ac_unit", 80: "rainy", 81: "thunderstorm", 
-        95: "thunderstorm"
+def get_weather_icon_and_text(code):
+    mapping = {
+        0: ("wb_sunny", "Clear", "#facc15"),
+        1: ("wb_sunny", "Clear", "#facc15"),
+        2: ("cloud", "Partly Cloudy", "#f1f5f9"),
+        3: ("cloud_queue", "Cloudy", "#f1f5f9"),
+        45: ("foggy", "Fog", "#94a3b8"),
+        48: ("foggy", "Fog", "#94a3b8"),
+        51: ("water_drop", "Drizzle", "#38bdf8"),
+        53: ("water_drop", "Drizzle", "#38bdf8"),
+        55: ("water_drop", "Drizzle", "#38bdf8"),
+        61: ("cloud_rain", "Rain", "#3b82f6"),
+        63: ("cloud_rain", "Rain", "#3b82f6"),
+        65: ("cloud_rain", "Heavy Rain", "#1e40af"),
+        71: ("ac_unit", "Snow", "#f1f5f9"),
+        73: ("ac_unit", "Snow", "#f1f5f9"),
+        75: ("ac_unit", "Snow", "#f1f5f9"),
+        80: ("cloud_rain", "Rain Showers", "#3b82f6"),
+        81: ("storm", "Thunderstorm", "#f87171"),
+        95: ("storm", "Thunderstorm", "#f87171")
     }
-    return icons.get(int(code), "help_outline")
+    return mapping.get(int(code), ("help_outline", "Unknown", "#f1f5f9"))
 
 # -------------------- FORECAST FUNCTIONS --------------------
 def generate_hourly_forecast(date):
@@ -143,12 +160,16 @@ def prediction_page():
     
     forecast = generate_hourly_forecast(selected_date)
     current = forecast[datetime.now().hour]
+    icon, text, color = get_weather_icon_and_text(current['weather_code'])
     
     st.markdown(f"""
     <div class="current-weather">
         <div style="display:flex;align-items:center;gap:16px">
             <span style="font-size:3rem;font-weight:600">{current['temperature']}°C</span>
-            <span class="material-icons" style="font-size:3rem">{get_weather_icon(current['weather_code'])}</span>
+            <div style="text-align:center">
+                <span class="material-icons" style="font-size:3rem;color:{color}">{icon}</span>
+                <div style="font-size:1rem;color:#94a3b8">{text}</div>
+            </div>
         </div>
         <div style="display:flex;gap:24px;margin-top:12px;color:#94a3b8">
             <div><span class="material-icons">air</span> {current['wind_speed']:.1f} km/h</div>
@@ -160,12 +181,14 @@ def prediction_page():
     st.subheader("Hourly Forecast")
     cols = st.columns(8)
     for i, hour in enumerate(forecast): 
+        icon, text, color = get_weather_icon_and_text(hour['weather_code'])
         with cols[i % 8]:
             st.markdown(f"""
             <div class="hour-card">
                 <div>{hour['time']}</div>
-                <span class="material-icons">{get_weather_icon(hour['weather_code'])}</span>
+                <span class="material-icons" style="color:{color}">{icon}</span>
                 <div>{hour['temperature']}°C</div>
+                <div style="font-size:0.8rem;color:#94a3b8">{text}</div>
                 <div style="font-size:0.8rem">
                     <span class="material-icons" style="font-size:0.8rem">air</span> {hour['wind_speed']:.1f} km/h
                 </div>
@@ -177,21 +200,32 @@ def prediction_page():
     with tab1:
         fig = px.line(pd.DataFrame(forecast), x='time', y='temperature', 
                      labels={'time': 'Hour', 'temperature': '°C'})
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
         fig = px.line(pd.DataFrame(forecast), x='time', y='wind_speed',
                      labels={'time': 'Hour', 'wind_speed': 'km/h'})
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
         wind_df = pd.DataFrame(forecast)
-        fig = px.line_polar(wind_df, r='wind_speed', theta='wind_direction',
-                          line_close=True, template="plotly_dark")
-        fig.update_traces(fill='toself')
-        fig.update_layout(polar=dict(radialaxis=dict(visible=True)), showlegend=False)
+        fig = px.bar_polar(
+            wind_df, r='wind_speed', theta='wind_direction',
+            color='wind_speed', color_continuous_scale=px.colors.sequential.Blues
+        )
+        fig.update_layout(
+            paper_bgcolor='#0f172a',
+            plot_bgcolor='#0f172a',
+            font_color='white',
+            polar=dict(
+                bgcolor='#0f172a',
+                angularaxis=dict(gridcolor='gray', linecolor='white'),
+                radialaxis=dict(gridcolor='gray', linecolor='white', visible=True)
+            ),
+            showlegend=False
+        )
         st.plotly_chart(fig, use_container_width=True)
 
 def trends_page():
@@ -202,11 +236,13 @@ def trends_page():
     with tab1:
         st.subheader("Temperature Trends")
         fig = px.line(df.resample('D', on='time').mean(), y='temperature_2m')
+        fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
         st.subheader("Precipitation Patterns")
         fig = px.bar(df.resample('D', on='time').sum(), y='precipitation (mm)')
+        fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
@@ -215,13 +251,27 @@ def trends_page():
         with col1:
             st.markdown("**Wind Speed Distribution**")
             fig = px.histogram(df, x='wind_speed_10m (km/h)')
+            fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
             st.plotly_chart(fig, use_container_width=True)
         with col2:
             st.markdown("**Wind Direction Rose**")
-            fig = px.bar_polar(df, r="wind_speed_10m (km/h)", 
-                              theta="wind_direction_100m",
-                              color="wind_speed_10m (km/h)",
-                              template="plotly_dark")
+            fig = px.bar_polar(
+                df, r="wind_speed_10m (km/h)", 
+                theta="wind_direction_100m",
+                color="wind_speed_10m (km/h)",
+                color_continuous_scale=px.colors.sequential.Blues
+            )
+            fig.update_layout(
+                paper_bgcolor='#0f172a',
+                plot_bgcolor='#0f172a',
+                font_color='white',
+                polar=dict(
+                    bgcolor='#0f172a',
+                    angularaxis=dict(gridcolor='gray', linecolor='white'),
+                    radialaxis=dict(gridcolor='gray', linecolor='white', visible=True)
+                ),
+                showlegend=False
+            )
             st.plotly_chart(fig, use_container_width=True)
 
 # -------------------- MAIN APP --------------------
@@ -244,5 +294,5 @@ def main():
     else:
         trends_page()
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     main()

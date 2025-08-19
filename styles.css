@@ -1,70 +1,40 @@
-:root {
-  --primary: #0f172a;
-  --secondary: #1e293b;
-  --accent: #7dd3fc;
-  --text: #f8fafc;
-  --highlight: #0ea5e9;
-}
-
-body,
-.stApp {
-  background-color: var(--primary);
-  color: var(--text);
-  font-family: "Inter", sans-serif;
-  font-feature-settings: "kern", "liga", "clig", "calt";
-  -webkit-font-feature-settings: "kern", "liga", "clig", "calt";
-  -moz-font-feature-settings: "kern", "liga", "clig", "calt";
+body {
+  font-family: "Roboto", "Helvetica", sans-serif;
+  color: #f1f5f9;
+  background-color: #0f172a;
 }
 
 .current-weather {
-  background: var(--secondary);
-  border-radius: 12px;
+  background-color: #1e293b;
   padding: 20px;
-  margin-bottom: 24px;
-  border-left: 4px solid var(--accent);
+  border-radius: 16px;
+  margin-bottom: 20px;
 }
 
 .hour-card {
-  background: var(--secondary);
-  border-radius: 8px;
-  padding: 12px;
-  margin: 8px;
+  background-color: #1f2a40;
   text-align: center;
-  transition: transform 0.2s;
+  padding: 12px;
+  margin: 4px;
+  border-radius: 12px;
+  font-size: 0.9rem;
 }
 
-.hour-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+.stTabs [role="tab"] {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
-.material-icons {
-  font-family: "Material Icons";
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-feature-settings: "liga";
-  -webkit-font-smoothing: antialiased;
+.stTabs [role="tab"]:hover {
+  color: #facc15;
 }
 
-.stTabs [data-baseweb="tab-list"] {
-  gap: 8px;
-}
-
-.stTabs [data-baseweb="tab"] {
-  background: var(--secondary);
-  border-radius: 8px 8px 0 0 !important;
-  padding: 8px 16px;
-}
-
-.stTabs [aria-selected="true"] {
-  background: var(--accent) !important;
-  color: var(--primary) !important;
+@media (max-width: 768px) {
+  .hour-card {
+    font-size: 0.8rem;
+    padding: 8px;
+  }
+  .current-weather {
+    padding: 16px;
+  }
 }
