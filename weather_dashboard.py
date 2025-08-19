@@ -166,8 +166,9 @@ def prediction_page():
     current = forecast[datetime.now().hour]
     icon, text, color = get_weather_icon_and_text(current['weather_code'])
     
+    # Top section showing current temp + icon + time on the right
     st.markdown(f"""
-    <div class="current-weather">
+    <div class="current-weather" style="display:flex;justify-content:space-between;align-items:center">
         <div style="display:flex;align-items:center;gap:16px">
             <span style="font-size:3rem;font-weight:600">{current['temperature']}°C</span>
             <div style="text-align:center">
@@ -175,13 +176,15 @@ def prediction_page():
                 <div style="font-size:1rem;color:#94a3b8">{text}</div>
             </div>
         </div>
-        <div style="display:flex;gap:24px;margin-top:12px;color:#94a3b8">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;color:#94a3b8">
+            <div><span class="material-icons">schedule</span> {current['time']}</div>
             <div><span class="material-icons">air</span> {current['wind_speed']:.1f} km/h</div>
             <div><span class="material-icons">water_drop</span> {int(current['humidity'])}%</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
+    # Hourly forecast cards
     st.subheader("Hourly Forecast")
     cols = st.columns(8)
     for i, hour in enumerate(forecast): 
@@ -199,6 +202,7 @@ def prediction_page():
             </div>
             """, unsafe_allow_html=True)
     
+    # Charts
     tab1, tab2, tab3 = st.tabs(["Temperature", "Wind Speed", "Wind Direction"])
     
     with tab1:
@@ -232,6 +236,7 @@ def prediction_page():
         )
         st.plotly_chart(fig, use_container_width=True)
 
+# Historical trends page
 def trends_page():
     st.title("Historical Weather Trends")
     
@@ -239,7 +244,8 @@ def trends_page():
     
     with tab1:
         st.subheader("Temperature Trends")
-        fig = px.line(df.resample('D', on='time').mean(), y='temperature_2m')
+        fig = px.line(df.resample('D', on='time').mean(), y='temperature_2m', 
+                      labels={'time': 'Date', 'temperature_2m': '°C'})
         fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
         st.plotly_chart(fig, use_container_width=True)
     
@@ -257,26 +263,27 @@ def trends_page():
             fig = px.histogram(df, x='wind_speed_10m (km/h)')
             fig.update_layout(plot_bgcolor='#0f172a', paper_bgcolor='#0f172a', font_color='white')
             st.plotly_chart(fig, use_container_width=True)
-        with col2:
-            st.markdown("**Wind Direction Rose**")
-            fig = px.bar_polar(
-                df, r="wind_speed_10m (km/h)", 
-                theta="wind_direction_100m",
-                color="wind_speed_10m (km/h)",
-                color_continuous_scale=px.colors.sequential.Blues
-            )
-            fig.update_layout(
-                paper_bgcolor='#0f172a',
-                plot_bgcolor='#0f172a',
-                font_color='white',
-                polar=dict(
-                    bgcolor='#0f172a',
-                    angularaxis=dict(gridcolor='gray', linecolor='white'),
-                    radialaxis=dict(gridcolor='gray', linecolor='white', visible=True)
-                ),
-                showlegend=False
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        st.markdown("**Wind Direction Rose**")
+        fig = px.bar_polar(
+            df,
+            r="wind_speed_10m (km/h)",
+            theta="wind_direction_100m",
+            color="wind_speed_10m (km/h)",
+            color_continuous_scale=px.colors.sequential.Blues
+        )
+        fig.update_layout(
+            paper_bgcolor='#0f172a',
+            plot_bgcolor='#0f172a',
+            font_color='white',
+            polar=dict(
+                bgcolor='#0f172a',
+                angularaxis=dict(gridcolor='gray', linecolor='white'),
+                radialaxis=dict(gridcolor='gray', linecolor='white', visible=True)
+            ),
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # -------------------- MAIN APP --------------------
 def main():
