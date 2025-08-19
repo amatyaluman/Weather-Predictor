@@ -118,14 +118,19 @@ def generate_hourly_forecast(date):
         if not similar_hour.empty:
             common_weather = similar_hour['weather_code'].mode()[0]
             wind_dir = similar_hour['wind_direction_100m'].median()
+            wind_speed_val = similar_hour['wind_speed_10m (km/h)'].median()
+            
             input_data.update({
                 'weather_code': common_weather,
-                'wind_direction_100m': wind_dir
+                'wind_direction_100m': wind_dir,
+                'wind_speed_10m (km/h)': wind_speed_val
             })
             
             weather_type = pd.cut([common_weather], bins=[0, 1, 3, 50, 70, 100], 
                                 labels=['clear', 'cloudy', 'fog', 'rain', 'storm'])[0]
             input_data[f'weather_type_{weather_type}'] = 1
+        else:
+            wind_speed_val = median_values['wind_speed_10m (km/h)']
         
         input_df = pd.DataFrame([input_data])
         for feature in set(model.feature_names_in_) - set(input_df.columns):
@@ -135,7 +140,6 @@ def generate_hourly_forecast(date):
         temp = round(float(pred[0, 0]) if pred.ndim > 1 else float(pred[0]), 1)
         
         humidity = float(input_df.get('relative_humidity_2m', [median_values['relative_humidity_2m']])[0])
-        wind_speed = float(input_df.get('wind_speed_10m (km/h)', [median_values['wind_speed_10m (km/h)']])[0])
         wind_direction = float(input_df.get('wind_direction_100m', [median_values['wind_direction_100m']])[0])
         
         forecasts.append({
@@ -144,7 +148,7 @@ def generate_hourly_forecast(date):
             'temperature': temp,
             'weather_code': common_weather if 'common_weather' in locals() else 0,
             'humidity': humidity,
-            'wind_speed': wind_speed,
+            'wind_speed': wind_speed_val,
             'wind_direction': wind_direction
         })
     
