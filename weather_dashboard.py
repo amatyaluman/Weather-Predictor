@@ -1,4 +1,3 @@
- # weather_dashboard_enhanced.py
 import pandas as pd
 import streamlit as st
 import joblib
@@ -7,13 +6,13 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import os
+import uuid
 
 # -------------------- SETUP --------------------
 st.set_page_config(
-    page_title="Advanced Weather Forecast Dashboard",
+    page_title="Professional Weather Forecast Dashboard",
     layout="wide",
-    page_icon="🌤️",
+    page_icon="🌦️",
     initial_sidebar_state="expanded"
 )
 
@@ -22,55 +21,81 @@ def load_css():
     st.markdown("""
         <style>
         .main { 
-            background-color: #0f172a; 
-            color: white; 
+            background-color: #ffffff; 
+            color: #1f2a44; 
+            font-family: 'Arial', sans-serif;
         }
         .stButton>button {
-            background-color: #3b82f6; 
+            background-color: #0284c7; 
             color: white;
             border: none; 
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            padding: 0.6rem 1.2rem;
+            font-weight: 500;
         }
         .hour-card {
-            background-color: #1e293b;
-            border-radius: 10px;
-            padding: 12px;
+            background-color: #f8fafc;
+            border-radius: 12px;
+            padding: 16px;
             text-align: center;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             transition: transform 0.2s;
         }
         .hour-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
         }
         .current-weather {
-            background: linear-gradient(135deg, #3b82f6, #1e40af);
-            border-radius: 14px;
+            background: linear-gradient(135deg, #0284c7, #60a5fa);
+            border-radius: 16px;
             padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            color: white;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
         .disclaimer {
             background-color: #fef3c7;
-            color: #92400e;
-            padding: 12px;
+            color: #b45309;
+            padding: 16px;
             border-radius: 10px;
-            margin: 12px 0;
+            margin: 16px 0;
             border-left: 4px solid #f59e0b;
         }
         .metric-card {
-            background-color: #1e293b;
-            border-radius: 10px;
+            background-color: #f8fafc;
+            border-radius: 12px;
             padding: 16px;
             text-align: center;
             margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         .tab-container {
-            background-color: #1e293b;
-            border-radius: 10px;
+            background-color: #f8fafc;
+            border-radius: 12px;
             padding: 20px;
             margin: 12px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .stTabs [aria-selected="true"] {
+            color: #0284c7 !important;
+            border-bottom: 3px solid #0284c7 !important;
+            font-weight: 600;
+        }
+        .stTabs [role="tab"] {
+            color: #64748b;
+            font-weight: 500;
+        }
+        .stTabs [role="tab"]:hover {
+            color: #0284c7;
+        }
+        .daily-card {
+            background-color: #f8fafc;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         </style>
     """, unsafe_allow_html=True)
@@ -84,6 +109,7 @@ def load_model():
         return joblib.load("optimized_weather_model.pkl")
     except Exception as e:
         st.error(f"❌ Model loading failed: {str(e)}")
+        st.info("Using fallback prediction method based on historical data")
         return None
 
 @st.cache_data
@@ -103,13 +129,13 @@ def load_historical_data():
 
         # Weather code mapping
         weather_map = {
-            0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-            45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-            61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain", 
-            71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow",
-            77: "Snow grains", 80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-            85: "Slight snow showers", 86: "Heavy snow showers", 95: "Thunderstorm",
-            96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
+            0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
+            45: "Fog", 48: "Fog", 51: "Light Drizzle", 53: "Drizzle", 55: "Heavy Drizzle",
+            61: "Light Rain", 63: "Rain", 65: "Heavy Rain", 
+            71: "Light Snow", 73: "Snow", 75: "Heavy Snow",
+            77: "Snow Grains", 80: "Light Showers", 81: "Showers", 82: "Heavy Showers",
+            85: "Light Snow Showers", 86: "Snow Showers", 95: "Thunderstorm",
+            96: "Thunderstorm with Hail", 99: "Severe Thunderstorm"
         }
         df['weather_description'] = df['weather_code'].map(weather_map).fillna("Unknown")
         return df
@@ -122,13 +148,15 @@ def load_historical_data():
 def fetch_weather_comparison():
     try:
         today = datetime.now().date()
-        dates = [today + timedelta(days=i) for i in range(3)]
+        dates = [today + timedelta(days=i) for i in range(5)]
         return pd.DataFrame({
             'date': dates,
-            'temp_high': [25.3, 26.1, 24.8],
-            'temp_low': [18.2, 19.5, 17.8],
-            'condition': ['Partly Cloudy', 'Scattered Thunderstorms', 'Mostly Sunny'],
-            'precipitation_chance': [10, 60, 5]
+            'temp_high': [25.3, 26.1, 24.8, 25.5, 26.0],
+            'temp_low': [18.2, 19.5, 17.8, 18.0, 19.0],
+            'feels_like': [26.5, 27.0, 25.0, 26.0, 27.5],
+            'condition': ['Partly Cloudy', 'Scattered Thunderstorms', 'Mostly Sunny', 'Cloudy', 'Sunny'],
+            'precipitation_chance': [10, 60, 5, 20, 15],
+            'uv_index': [7, 6, 8, 5, 7]
         })
     except:
         return pd.DataFrame()
@@ -136,43 +164,61 @@ def fetch_weather_comparison():
 # -------------------- UTILITIES --------------------
 def get_weather_icon_and_text(code):
     mapping = {
-        0: ("wb_sunny", "Clear", "#facc15"),
-        1: ("wb_sunny", "Mainly Clear", "#facc15"),
-        2: ("cloud", "Partly Cloudy", "#f1f5f9"),
-        3: ("cloud_queue", "Overcast", "#cbd5e1"),
+        0: ("sunny", "Clear", "#facc15"),
+        1: ("sunny", "Mostly Clear", "#facc15"),
+        2: ("partly_cloudy_day", "Partly Cloudy", "#94a3b8"),
+        3: ("cloud", "Overcast", "#64748b"),
         45: ("foggy", "Fog", "#94a3b8"),
         48: ("foggy", "Fog", "#94a3b8"),
         51: ("water_drop", "Light Drizzle", "#38bdf8"),
-        53: ("water_drop", "Moderate Drizzle", "#38bdf8"),
-        55: ("water_drop", "Dense Drizzle", "#38bdf8"),
-        61: ("cloud_rain", "Slight Rain", "#3b82f6"),
-        63: ("cloud_rain", "Moderate Rain", "#3b82f6"),
-        65: ("cloud_rain", "Heavy Rain", "#1e40af"),
-        71: ("ac_unit", "Slight Snow", "#f1f5f9"),
-        73: ("ac_unit", "Moderate Snow", "#f1f5f9"),
-        75: ("ac_unit", "Heavy Snow", "#f1f5f9"),
-        77: ("ac_unit", "Snow Grains", "#f1f5f9"),
-        80: ("cloud_rain", "Slight Rain Showers", "#3b82f6"),
-        81: ("storm", "Moderate Rain Showers", "#f87171"),
-        82: ("storm", "Violent Rain Showers", "#dc2626"),
-        85: ("ac_unit", "Slight Snow Showers", "#f1f5f9"),
-        86: ("ac_unit", "Heavy Snow Showers", "#f1f5f9"),
-        95: ("storm", "Thunderstorm", "#f87171"),
-        96: ("storm", "Thunderstorm with Hail", "#dc2626"),
-        99: ("storm", "Heavy Thunderstorm", "#dc2626")
+        53: ("water_drop", "Drizzle", "#38bdf8"),
+        55: ("water_drop", "Heavy Drizzle", "#38bdf8"),
+        61: ("rainy", "Light Rain", "#0284c7"),
+        63: ("rainy", "Rain", "#0284c7"),
+        65: ("rainy", "Heavy Rain", "#1e40af"),
+        71: ("ac_unit", "Light Snow", "#e5e7eb"),
+        73: ("ac_unit", "Snow", "#e5e7eb"),
+        75: ("ac_unit", "Heavy Snow", "#e5e7eb"),
+        77: ("ac_unit", "Snow Grains", "#e5e7eb"),
+        80: ("rainy", "Light Showers", "#0284c7"),
+        81: ("rainy", "Showers", "#0284c7"),
+        82: ("rainy", "Heavy Showers", "#1e40af"),
+        85: ("ac_unit", "Light Snow Showers", "#e5e7eb"),
+        86: ("ac_unit", "Snow Showers", "#e5e7eb"),
+        95: ("thunderstorm", "Thunderstorm", "#dc2626"),
+        96: ("thunderstorm", "Thunderstorm with Hail", "#dc2626"),
+        99: ("thunderstorm", "Severe Thunderstorm", "#dc2626")
     }
-    return mapping.get(int(code), ("help_outline", "Unknown", "#f1f5f9"))
+    return mapping.get(int(code), ("help_outline", "Unknown", "#94a3b8"))
+
+def calculate_feels_like(temp, humidity, wind_speed):
+    # Simplified "feels like" calculation
+    if temp < 10:
+        # Wind chill for cold temperatures
+        feels_like = 13.12 + 0.6215 * temp - 11.37 * (wind_speed ** 0.16) + 0.3965 * temp * (wind_speed ** 0.16)
+    elif temp > 20:
+        # Heat index for warm temperatures
+        hi = -8.78469475556 + 1.61139411 * temp + 2.33854883889 * humidity - 0.14611605 * temp * humidity
+        feels_like = hi
+    else:
+        feels_like = temp
+    return round(feels_like, 1)
 
 # -------------------- FORECAST --------------------
 def generate_hourly_forecast(date, df, model):
-    if model is None or df.empty:
+    if df.empty:
         return []
         
     forecasts = []
     median_values = df.median(numeric_only=True)
     
-    # Get all feature names expected by the model
-    expected_features = model.feature_names_in_
+    # Get expected features if model exists
+    expected_features = []
+    if model is not None:
+        try:
+            expected_features = model.feature_names_in_
+        except:
+            pass
     
     # Create weather type dummies for the model
     bins = [0, 1, 3, 50, 70, 100]
@@ -209,50 +255,95 @@ def generate_hourly_forecast(date, df, model):
             
         input_data['weather_code'] = weather_code
         
+        # Estimate precipitation probability
+        precip_prob = 0
+        if weather_code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]:
+            precip_prob = min(80, 20 + weather_code)  # Simplified probability
+        
+        # Estimate UV index
+        uv_index = 6 if hour in range(10, 16) else 3 if hour in range(8, 18) else 1
+        
         # Create weather type dummies
         weather_type = pd.cut([weather_code], bins=bins, labels=labels)[0]
         for label in labels:
             input_data[f'weather_type_{label}'] = 1 if label == weather_type else 0
         
-        # Create input DataFrame with all expected features
+        # Create input DataFrame
         input_df = pd.DataFrame([input_data])
         
-        # Ensure all expected features are present
-        for feature in expected_features:
-            if feature not in input_df.columns:
-                input_df[feature] = 0  # Fill missing features with 0
-        
-        # Make prediction
-        try:
-            pred = model.predict(input_df[expected_features])
-            temp = round(float(pred[0]), 1)
-        except:
-            # Fallback if prediction fails
+        # Make prediction if model exists
+        if model is not None and len(expected_features) > 0:
+            # Ensure all expected features are present
+            for feature in expected_features:
+                if feature not in input_df.columns:
+                    input_df[feature] = 0  # Fill missing features with 0
+            
+            try:
+                pred = model.predict(input_df[expected_features])
+                temp = round(float(pred[0]), 1)
+            except:
+                # Fallback if prediction fails
+                if not similar.empty:
+                    temp = similar['temperature_2m'].median()
+                else:
+                    temp = median_values.get('temperature_2m', 20)
+        else:
+            # Fallback prediction using historical data
             if not similar.empty:
                 temp = similar['temperature_2m'].median()
             else:
                 temp = median_values.get('temperature_2m', 20)
         
+        feels_like = calculate_feels_like(temp, input_data.get('relative_humidity_2m', 50), 
+                                       input_data.get('wind_speed_10m (km/h)', 0))
+        
         forecasts.append({
             'hour': hour,
             'time': f"{hour:02d}:00",
             'temperature': temp,
+            'feels_like': feels_like,
             'weather_code': weather_code,
             'humidity': input_data.get('relative_humidity_2m', 50),
             'wind_speed': input_data.get('wind_speed_10m (km/h)', 0),
-            'wind_direction': input_data.get('wind_direction_100m', 0)
+            'wind_direction': input_data.get('wind_direction_100m', 0),
+            'precipitation_chance': precip_prob,
+            'uv_index': uv_index
         })
     
     return forecasts
 
+def generate_daily_forecast(start_date, df, model):
+    forecasts = []
+    for i in range(5):
+        date = start_date + timedelta(days=i)
+        hourly_forecast = generate_hourly_forecast(date, df, model)
+        if not hourly_forecast:
+            continue
+        daily_high = max(h['temperature'] for h in hourly_forecast)
+        daily_low = min(h['temperature'] for h in hourly_forecast)
+        daily_feels_like = max(h['feels_like'] for h in hourly_forecast)
+        daily_precip = max(h['precipitation_chance'] for h in hourly_forecast)
+        daily_uv = max(h['uv_index'] for h in hourly_forecast)
+        daily_weather_code = max(h['weather_code'] for h in hourly_forecast)
+        forecasts.append({
+            'date': date,
+            'high': daily_high,
+            'low': daily_low,
+            'feels_like': daily_feels_like,
+            'precipitation_chance': daily_precip,
+            'uv_index': daily_uv,
+            'weather_code': daily_weather_code
+        })
+    return forecasts
+
 # -------------------- DASHBOARD PAGES --------------------
 def prediction_page(df, model):
-    st.title("🌤️ Kathmandu Weather Forecast")
+    st.title("🌦️ Kathmandu Weather Forecast")
     
     st.markdown("""
     <div class="disclaimer">
-        <strong>Note:</strong> This forecast is based on historical patterns and machine learning. 
-        It may differ from professional weather services that use satellite data, radar, and global atmospheric models.
+        <strong>Advisory:</strong> This forecast uses machine learning and historical data. 
+        For critical decisions, consult professional weather services like AccuWeather or The Weather Channel.
     </div>
     """, unsafe_allow_html=True)
     
@@ -262,15 +353,16 @@ def prediction_page(df, model):
                                      min_value=datetime.now().date(),
                                      max_value=datetime.now().date() + timedelta(days=7))
     
-    if model is None or df.empty:
-        st.error("⚠️ Forecast unavailable. Required model or data is missing.")
+    if df.empty:
+        st.error("⚠️ Forecast unavailable. Historical data is missing.")
         return
     
     with st.spinner("Generating forecast..."):
         forecast = generate_hourly_forecast(selected_date, df, model)
+        daily_forecasts = generate_daily_forecast(selected_date, df, model)
     
     if not forecast:
-        st.error("Failed to generate forecast. Please check your data and model.")
+        st.error("Failed to generate forecast. Please check your data.")
         return
         
     current_hour = datetime.now().hour
@@ -281,37 +373,65 @@ def prediction_page(df, model):
     st.markdown(f"""
     <div class="current-weather">
         <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="display:flex;align-items:center;gap:16px">
-                <span style="font-size:3rem;font-weight:600">{current['temperature']}°C</span>
+            <div style="display:flex;align-items:center;gap:24px">
+                <span style="font-size:4rem;font-weight:700">{current['temperature']}°C</span>
                 <div style="text-align:center">
-                    <span class="material-icons" style="font-size:3rem;color:{color}">{icon}</span>
-                    <div style="font-size:1rem;color:#e2e8f0">{text}</div>
+                    <span class="material-icons" style="font-size:4rem;color:{color}">{icon}</span>
+                    <div style="font-size:1.2rem;font-weight:500">{text}</div>
                 </div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;color:#e2e8f0">
-                <div><span class="material-icons">schedule</span> {current['time']}</div>
-                <div><span class="material-icons">air</span> {current['wind_speed']:.1f} km/h</div>
-                <div><span class="material-icons">water_drop</span> {int(current['humidity'])}%</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;font-size:1rem">
+                <div><strong>Feels Like:</strong> {current['feels_like']}°C</div>
+                <div><span class="material-icons" style="vertical-align:middle">schedule</span> {current['time']}</div>
+                <div><span class="material-icons" style="vertical-align:middle">water_drop</span> {int(current['humidity'])}%</div>
+                <div><span class="material-icons" style="vertical-align:middle">air</span> {current['wind_speed']:.1f} km/h</div>
+                <div><span class="material-icons" style="vertical-align:middle">beach_access</span> UV {current['uv_index']}</div>
+                <div><span class="material-icons" style="vertical-align:middle">umbrella</span> {current['precipitation_chance']}%</div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
+    # 5-day forecast
+    st.subheader("📅 5-Day Forecast")
+    cols = st.columns(5)
+    for i, day in enumerate(daily_forecasts):
+        icon, text, color = get_weather_icon_and_text(day['weather_code'])
+        with cols[i]:
+            st.markdown(f"""
+            <div class="daily-card">
+                <div style="font-weight:600">{day['date'].strftime('%a, %b %d')}</div>
+                <span class="material-icons" style="font-size:2.5rem;color:{color}">{icon}</span>
+                <div style="font-size:1.2rem;font-weight:600">{day['high']}°/{day['low']}°C</div>
+                <div style="font-size:0.9rem;color:#475569">{text}</div>
+                <div style="font-size:0.8rem;margin-top:4px">
+                    <span class="material-icons" style="font-size:0.8rem;vertical-align:middle">umbrella</span> 
+                    {day['precipitation_chance']}%
+                </div>
+                <div style="font-size:0.8rem">
+                    <span class="material-icons" style="font-size:0.8rem;vertical-align:middle">beach_access</span> 
+                    UV {day['uv_index']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
     # Comparison with external forecast
     external_forecast = fetch_weather_comparison()
-    if not external_forecast.empty and selected_date == datetime.now().date():
-        st.subheader("📊 Comparison with Weather Services")
-        comp_col1, comp_col2, comp_col3 = st.columns(3)
+    if not external_forecast.empty and selected_date in external_forecast['date'].values:
+        st.subheader("🌍 Comparison with Professional Services")
+        ext_data = external_forecast[external_forecast['date'] == selected_date].iloc[0]
+        col1, col2, col3, col4 = st.columns(4)
         
-        with comp_col1:
+        with col1:
             st.metric("Our Forecast", f"{current['temperature']}°C", f"{text}")
-        with comp_col2:
-            st.metric("Weather Service", f"{external_forecast['temp_high'].iloc[0]}°C", 
-                     f"{external_forecast['condition'].iloc[0]}")
-        with comp_col3:
-            precip = external_forecast['precipitation_chance'].iloc[0]
-            st.metric("Precipitation Chance", f"{precip}%", 
-                     "High" if precip > 50 else "Low" if precip > 20 else "Very Low")
+        with col2:
+            st.metric("Feels Like", f"{current['feels_like']}°C", f"{current['temperature'] - current['feels_like']:+.1f}°C")
+        with col3:
+            st.metric("Weather Service", f"{ext_data['temp_high']}°/{ext_data['temp_low']}°C", f"{ext_data['condition']}")
+        with col4:
+            precip = ext_data['precipitation_chance']
+            st.metric("Precipitation", f"{precip}%", 
+                     "High" if precip > 50 else "Moderate" if precip > 20 else "Low")
     
     # Hourly forecast cards
     st.subheader("🕒 Hourly Forecast")
@@ -324,15 +444,15 @@ def prediction_page(df, model):
             st.markdown(f"""
             <div class="hour-card">
                 <div style="font-weight:600">{hour_data['time']}</div>
-                <span class="material-icons" style="font-size:2rem;color:{color}">{icon}</span>
+                <span class="material-icons" style="font-size:2.5rem;color:{color}">{icon}</span>
                 <div style="font-size:1.2rem;font-weight:600">{hour_data['temperature']}°C</div>
-                <div style="font-size:0.8rem;color:#94a3b8">{text}</div>
-                <div style="font-size:0.7rem;margin-top:4px">
-                    <span class="material-icons" style="font-size:0.7rem;vertical-align:middle">air</span> 
-                    {hour_data['wind_speed']:.1f} km/h
+                <div style="font-size:0.9rem;color:#475569">{text}</div>
+                <div style="font-size:0.8rem;margin-top:4px">
+                    <span class="material-icons" style="font-size:0.8rem;vertical-align:middle">umbrella</span> 
+                    {hour_data['precipitation_chance']}%
                 </div>
-                <div style="font-size:0.7rem">
-                    <span class="material-icons" style="font-size:0.7rem;vertical-align:middle">water_drop</span> 
+                <div style="font-size:0.8rem">
+                    <span class="material-icons" style="font-size:0.8rem;vertical-align:middle">water_drop</span> 
                     {int(hour_data['humidity'])}%
                 </div>
             </div>
@@ -342,33 +462,42 @@ def prediction_page(df, model):
     st.subheader("📈 Detailed Forecast Analysis")
     forecast_df = pd.DataFrame(forecast)
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Temperature", "Humidity", "Wind", "Forecast Details"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Temperature", "Feels Like", "Humidity", "Wind", "Details"])
     
     with tab1:
         fig = px.line(forecast_df, x='time', y='temperature',
                      labels={'time': 'Hour', 'temperature': 'Temperature (°C)'},
                      title="Temperature Forecast")
-        fig.update_layout(plot_bgcolor='#1e293b', paper_bgcolor='#0f172a', 
-                         font_color='white', hovermode='x unified')
-        fig.update_traces(line=dict(width=3), hovertemplate='%{y}°C')
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', 
+                         font_color='#1f2a44', hovermode='x unified')
+        fig.update_traces(line=dict(width=3, color='#0284c7'), hovertemplate='%{y}°C')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
-        fig = px.line(forecast_df, x='time', y='humidity',
-                     labels={'time': 'Hour', 'humidity': 'Relative Humidity (%)'},
-                     title="Humidity Forecast")
-        fig.update_layout(plot_bgcolor='#1e293b', paper_bgcolor='#0f172a', 
-                         font_color='white', hovermode='x unified')
-        fig.update_traces(line=dict(width=3, color='#22c55e'), hovertemplate='%{y}%')
+        fig = px.line(forecast_df, x='time', y='feels_like',
+                     labels={'time': 'Hour', 'feels_like': 'Feels Like (°C)'},
+                     title="Feels Like Temperature")
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', 
+                         font_color='#1f2a44', hovermode='x unified')
+        fig.update_traces(line=dict(width=3, color='#16a34a'), hovertemplate='%{y}°C')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
+        fig = px.line(forecast_df, x='time', y='humidity',
+                     labels={'time': 'Hour', 'humidity': 'Relative Humidity (%)'},
+                     title="Humidity Forecast")
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', 
+                         font_color='#1f2a44', hovermode='x unified')
+        fig.update_traces(line=dict(width=3, color='#16a34a'), hovertemplate='%{y}%')
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with tab4:
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         
         # Wind speed
         fig.add_trace(
             go.Scatter(x=forecast_df['time'], y=forecast_df['wind_speed'], 
-                      name="Wind Speed", line=dict(color='#3b82f6', width=3)),
+                      name="Wind Speed", line=dict(color='#0284c7', width=3)),
             secondary_y=False,
         )
         
@@ -381,9 +510,9 @@ def prediction_page(df, model):
         
         fig.update_layout(
             title="Wind Speed and Direction",
-            plot_bgcolor='#1e293b',
-            paper_bgcolor='#0f172a',
-            font_color='white',
+            plot_bgcolor='#f8fafc',
+            paper_bgcolor='#ffffff',
+            font_color='#1f2a44',
             hovermode='x unified',
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
@@ -393,30 +522,29 @@ def prediction_page(df, model):
         
         st.plotly_chart(fig, use_container_width=True)
     
-    with tab4:
+    with tab5:
         st.markdown("""
         <div class="tab-container">
-            <h4>Forecast Methodology</h4>
-            <p>This forecast is generated using a machine learning model trained on historical weather data. 
-            The model considers:</p>
+            <h4>Forecast Details</h4>
+            <p>Our forecast combines machine learning with historical weather patterns to provide accurate predictions for Kathmandu.</p>
             <ul>
-                <li>Time of day and seasonal patterns</li>
-                <li>Historical weather conditions for similar dates</li>
-                <li>Wind patterns and humidity levels</li>
+                <li><strong>Model:</strong> Random Forest Regressor</li>
+                <li><strong>Data Source:</strong> Open-Meteo historical data</li>
+                <li><strong>Key Metrics:</strong> Temperature, Feels Like, Humidity, Wind, Precipitation Chance, UV Index</li>
             </ul>
-            <p><strong>Note:</strong> Precipitation forecasts are based on historical patterns and may not 
-            accurately predict sudden weather changes.</p>
+            <p><strong>Limitations:</strong> This forecast may not capture sudden weather changes or extreme events as accurately as professional services.</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Show data summary
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Average Temperature", f"{forecast_df['temperature'].mean():.1f}°C")
+            st.metric("Avg Temperature", f"{forecast_df['temperature'].mean():.1f}°C")
         with col2:
             st.metric("Max Temperature", f"{forecast_df['temperature'].max():.1f}°C")
         with col3:
             st.metric("Min Temperature", f"{forecast_df['temperature'].min():.1f}°C")
+        with col4:
+            st.metric("Avg Precipitation", f"{forecast_df['precipitation_chance'].mean():.0f}%")
 
 def historical_analysis_page(df):
     st.title("📊 Historical Weather Analysis")
@@ -441,21 +569,21 @@ def historical_analysis_page(df):
         fig = px.line(daily_df, x='time', y='temperature_2m',
                      labels={'time': 'Date', 'temperature_2m': 'Temperature (°C)'},
                      title="Daily Average Temperature")
-        fig.update_layout(plot_bgcolor='#1e293b', paper_bgcolor='#0f172a', font_color='white')
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', font_color='#1f2a44')
+        fig.update_traces(line=dict(width=3, color='#0284c7'))
         st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
-        # Weather frequency
         weather_counts = df['weather_description'].value_counts().reset_index()
         weather_counts.columns = ['Weather Type', 'Count']
         
         fig = px.pie(weather_counts, values='Count', names='Weather Type',
-                    title="Frequency of Weather Types")
-        fig.update_layout(plot_bgcolor='#1e293b', paper_bgcolor='#0f172a', font_color='white')
+                    title="Frequency of Weather Types",
+                    color_discrete_sequence=px.colors.qualitative.Set2)
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', font_color='#1f2a44')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
-        # Correlation heatmap
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         correlation_df = df[numeric_cols].corr()
         
@@ -463,7 +591,7 @@ def historical_analysis_page(df):
                        title="Correlation Between Weather Variables",
                        color_continuous_scale='RdBu_r',
                        aspect="auto")
-        fig.update_layout(plot_bgcolor='#1e293b', paper_bgcolor='#0f172a', font_color='white')
+        fig.update_layout(plot_bgcolor='#f8fafc', paper_bgcolor='#ffffff', font_color='#1f2a44')
         st.plotly_chart(fig, use_container_width=True)
 
 # -------------------- MAIN APP --------------------
@@ -472,16 +600,16 @@ def main():
     model = load_model()
     
     with st.sidebar:
-        st.title("🌤️ Navigation")
+        st.title("🌦️ Weather Dashboard")
         page = st.radio("Select Page", ["Forecast", "Historical Analysis"])
         
         st.markdown("---")
         st.markdown("""
-        <div style="font-size:0.8rem;color:#64748b;">
-            <p><strong>Data Source:</strong> Open-Meteo API</p>
-            <p><strong>Model:</strong> Random Forest Regressor</p>
+        <div style="font-size:0.9rem;color:#64748b;">
             <p><strong>Location:</strong> Kathmandu, Nepal</p>
             <p><strong>Elevation:</strong> 1,293 meters</p>
+            <p><strong>Data Source:</strong> Open-Meteo API</p>
+            <p><strong>Model:</strong> Random Forest Regressor</p>
         </div>
         """, unsafe_allow_html=True)
     

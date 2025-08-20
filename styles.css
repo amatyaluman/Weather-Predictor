@@ -18,6 +18,12 @@ body {
   margin: 4px;
   border-radius: 12px;
   font-size: 0.9rem;
+  transition: transform 0.2s ease;
+}
+
+.hour-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .stTabs [role="tab"] {
@@ -29,12 +35,49 @@ body {
   color: #badbf1;
 }
 
-@media (max-width: 768px) {s
+.stTabs [aria-selected="true"] {
+  color: #3b82f6 !important;
+  border-bottom: 2px solid #3b82f6 !important;
+}
+
+.metric-card {
+  background-color: #1e293b;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  margin: 8px 0;
+}
+
+.tab-container {
+  background-color: #1e293b;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 12px 0;
+}
+
+.disclaimer {
+  background-color: #1e293b;
+  color: #f59e0b;
+  padding: 16px;
+  border-radius: 10px;
+  margin: 16px 0;
+  border-left: 4px solid #f59e0b;
+}
+
+@media (max-width: 768px) {
   .hour-card {
     font-size: 0.8rem;
     padding: 8px;
+    margin: 2px;
   }
+
   .current-weather {
     padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .metric-card {
+    padding: 12px;
+    margin: 6px 0;
   }
 }
