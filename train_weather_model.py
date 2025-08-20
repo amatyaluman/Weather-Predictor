@@ -58,4 +58,3 @@ print(f"Test MSE: {mse:.2f}")
 # Save optimized model with compression
 joblib.dump(model, "optimized_weather_model.pkl", compress=3)
 print("Optimized model saved as optimized_weather_model.pkl")
-##bb
