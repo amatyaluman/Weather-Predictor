@@ -9,12 +9,12 @@ from prophet import Prophet
 import joblib
 import holidays
 
-# -------------------- LOAD HISTORICAL DATA --------------------
+# LOAD HISTORICAL DATA 
 df = pd.read_csv("open-meteo-27.75N85.50E1293mNew.csv")
 df['time'] = pd.to_datetime(df['time'])
 df = df.sort_values('time').reset_index(drop=True)
 
-# -------------------- FEATURE ENGINEERING (RF) --------------------
+#  FEATURE ENGINEERING (RF)
 df['hour'] = df['time'].dt.hour
 df['day'] = df['time'].dt.day
 df['month'] = df['time'].dt.month
@@ -55,7 +55,7 @@ features.extend(lag_features)
 X = df[features]
 y = df['temperature_next_hour']
 
-# -------------------- TIME SERIES CROSS VALIDATION --------------------
+# TIME SERIES CROSS VALIDATION
 tscv = TimeSeriesSplit(n_splits=5)
 rmse_scores = []
 
@@ -79,7 +79,7 @@ for train_index, test_index in tscv.split(X):
 
 print(f"Time Series Cross-Validation RMSE: {np.mean(rmse_scores):.4f} (±{np.std(rmse_scores):.4f})")
 
-# -------------------- FINAL MODEL TRAINING --------------------
+# FINAL MODEL TRAINING
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
@@ -118,7 +118,7 @@ joblib.dump(scaler, "feature_scaler.pkl")
 joblib.dump(features, "model_features.pkl")
 print("Saved Random Forest model and scaler")
 
-# -------------------- PROPHET DAILY FORECAST --------------------
+# PROPHET DAILY FORECAST
 df_prophet = df.rename(columns={'time': 'ds'})
 features_to_forecast = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 'precipitation']
 
@@ -155,7 +155,7 @@ for feature in features_to_forecast:
 joblib.dump(all_prophet_models, "prophet_kathmandu_all_models.pkl")
 print("Saved Prophet models → prophet_kathmandu_all_models.pkl")
 
-# -------------------- SAVE HISTORICAL DATA FOR DASHBOARD --------------------
+# SAVE HISTORICAL DATA FOR DASHBOARD
 historical_data = df[['time', 'temperature_2m', 'relative_humidity_2m', 
                       'precipitation', 'wind_speed_10m']].copy()
 historical_data.to_csv("historical_weather_data.csv", index=False)

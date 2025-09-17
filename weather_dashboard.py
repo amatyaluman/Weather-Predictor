@@ -13,9 +13,9 @@ from plotly.subplots import make_subplots
 import holidays
 
 st.set_page_config(page_title="Kathmandu Weather Dashboard", layout="wide")
-st.title("🌤️ Kathmandu Weather Dashboard — Historical Analysis & Accurate Forecasts")
+st.title("Kathmandu Weather Dashboard")
 
-# -------------------- LOAD HISTORICAL DATA --------------------
+# LOAD HISTORICAL DATA
 @st.cache_data
 def load_historical_data():
     try:
@@ -40,7 +40,7 @@ def load_historical_data():
         st.error(f"Error loading historical data: {e}")
         return None
 
-# -------------------- LOAD MODELS --------------------
+# LOAD MODELS
 @st.cache_resource
 def load_models():
     try:
@@ -55,7 +55,7 @@ def load_models():
 historical_data = load_historical_data()
 rf_model, all_prophet_models = load_models()
 
-# -------------------- FETCH LIVE WEATHER --------------------
+#  FETCH LIVE WEATHER 
 @st.cache_data(ttl=600)
 def fetch_live_weather():
     # Setup cache & retry
@@ -119,7 +119,7 @@ def fetch_live_weather():
 
 current_weather, hourly_df = fetch_live_weather()
 
-# -------------------- SIDEBAR CONTROLS --------------------
+#  SIDEBAR CONTROLS
 st.sidebar.header("Dashboard Controls")
 view_option = st.sidebar.radio("Select View", ["Current Weather", "Historical Analysis", "Forecasts"])
 
@@ -137,9 +137,9 @@ if historical_data is not None:
         st.sidebar.error("Error: End date must be after start date.")
         historical_start, historical_end = default_start, default_end
 
-# -------------------- CURRENT WEATHER VIEW --------------------
+# CURRENT WEATHER VIEW
 if view_option == "Current Weather":
-    st.subheader("🌡️ Current Weather Conditions")
+    st.subheader("Current Weather Conditions")
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Temperature", f"{current_weather['temperature_2m']:.1f} °C")
@@ -170,7 +170,7 @@ if view_option == "Current Weather":
     st.info(f"**Current conditions:** {weather_desc}")
     
     # Hourly forecast chart
-    st.subheader("📈 Hourly Forecast (Next 24 Hours)")
+    st.subheader("Hourly Forecast (Next 24 Hours)")
     hourly_next24 = hourly_df[['date', 'temperature_2m', 'relative_humidity_2m', 
                               'precipitation', 'wind_speed_10m']].head(24).copy()
     hourly_next24['hour'] = hourly_next24['date'].dt.strftime("%H:%M")
@@ -209,9 +209,9 @@ if view_option == "Current Weather":
         ).properties(height=300)
         st.altair_chart(chart, use_container_width=True)
 
-# -------------------- HISTORICAL ANALYSIS VIEW --------------------
+#HISTORICAL ANALYSIS VIEW 
 elif view_option == "Historical Analysis" and historical_data is not None:
-    st.subheader("📊 Historical Weather Analysis")
+    st.subheader(" Historical Weather Analysis")
     
     # Filter historical data based on selected date range
     filtered_data = historical_data[
@@ -275,9 +275,9 @@ elif view_option == "Historical Analysis" and historical_data is not None:
         ).properties(height=300)
         st.altair_chart(chart, use_container_width=True)
 
-# -------------------- FORECASTS VIEW --------------------
+#FORECASTS VIEW
 elif view_option == "Forecasts":
-    st.subheader("🔮 Weather Forecasts")
+    st.subheader(" Weather Forecasts")
     
     if all_prophet_models is None:
         st.error("Prophet models not available. Please run train_weather_model.py first.")
@@ -363,7 +363,7 @@ elif view_option == "Forecasts":
                     'difference': 'Difference'
                 }))
 
-# -------------------- FOOTER --------------------
+# FOOTER 
 st.sidebar.markdown("---")
 st.sidebar.info(
     """
