@@ -1,21 +1,18 @@
-# weather_dashboard.py
+#weather_dashboard
 import streamlit as st
 import pandas as pd
 import joblib
 import numpy as np
 from datetime import datetime, timedelta
 import altair as alt
-import requests_cache
-from retry_requests import retry
-import openmeteo_requests
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import holidays
 
 st.set_page_config(page_title="Kathmandu Weather Dashboard", layout="wide")
 st.title("Kathmandu Weather Dashboard")
 
+# -----------------------------
 # LOAD HISTORICAL DATA
+# -----------------------------
 @st.cache_data
 def load_historical_data():
     try:
@@ -40,88 +37,103 @@ def load_historical_data():
         st.error(f"Error loading historical data: {e}")
         return None
 
+# -----------------------------
 # LOAD MODELS
+# -----------------------------
 @st.cache_resource
 def load_models():
     try:
-        rf_model = joblib.load("hourly_weather_model.pkl")
-        all_prophet_models = joblib.load("prophet_kathmandu_all_models.pkl")
-        return rf_model, all_prophet_models
-    except:
-        st.error("Model files not found. Please run train_weather_model.py first.")
-        return None, None
+        # Load Random Forest models
+        rf_models = joblib.load("hourly_weather_model.pkl")
+        
+        # Get feature names from the first model
+        first_model = list(rf_models.values())[0]
+        model_features = list(first_model.feature_names_in_)
+        
+        # Load Prophet models
+        prophet_models = joblib.load("prophet_models.pkl")
+        
+        return rf_models, None, model_features, prophet_models
+    except Exception as e:
+        st.error(f"Error loading models: {e}")
+        st.info("Please run train_weather_model.py first to train the models.")
+        return None, None, None, None
 
 # Load data and models
 historical_data = load_historical_data()
-rf_model, all_prophet_models = load_models()
+rf_models, scaler, model_features, prophet_models = load_models()
 
-#  FETCH LIVE WEATHER 
-@st.cache_data(ttl=600)
-def fetch_live_weather():
-    # Setup cache & retry
-    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    client = openmeteo_requests.Client(session=retry_session)
-
-    url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": 27.7017,
-        "longitude": 85.3206,
-        "hourly": ["temperature_2m", "relative_humidity_2m", "dew_point_2m",
-                   "precipitation", "visibility", "surface_pressure",
-                   "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"],
-        "models": "best_match",
-        "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature",
-                    "precipitation", "rain", "showers", "weather_code",
-                    "cloud_cover", "wind_speed_10m", "wind_direction_10m",
-                    "wind_gusts_10m"],
-        "past_days": 2,
-        "forecast_days": 7
+# Weather icon mapping using HTML/CSS icons
+def get_weather_icon(weather_type):
+    """Return HTML for weather icons"""
+    icon_map = {
+        'Clear': '☀️',
+        'Sunny': '☀️',
+        'Mainly Clear': '🌤️',
+        'Partly Cloudy': '⛅',
+        'Cloudy': '☁️',
+        'Overcast': '☁️',
+        'Foggy': '🌫️',
+        'Mist': '🌫️',
+        'Light Rain': '🌦️',
+        'Rain': '🌧️',
+        'Heavy Rain': '⛈️',
+        'Light Snow': '🌨️',
+        'Snow': '❄️',
+        'Heavy Snow': '☃️',
+        'Thunderstorm': '⛈️',
+        'Drizzle': '💧',
+        'Showers': '🌦️',
+        'Windy': '💨',
+        'Breezy': '💨',
+        'Humid': '💦',
+        'Hot': '🔥',
+        'Warm': '😊',
+        'Mild': '😐',
+        'Cool': '🍃',
+        'Cold': '🥶',
+        'Freezing': '🧊'
     }
+    return icon_map.get(weather_type, '🌈')
 
-    responses = client.weather_api(url, params=params)
-    response = responses[0]
-
-    # Current weather
-    current = response.Current()
-    current_weather = {
-        "temperature_2m": current.Variables(0).Value(),
-        "relative_humidity_2m": current.Variables(1).Value(),
-        "apparent_temperature": current.Variables(2).Value(),
-        "precipitation": current.Variables(3).Value(),
-        "rain": current.Variables(4).Value(),
-        "showers": current.Variables(5).Value(),
-        "weather_code": current.Variables(6).Value(),
-        "cloud_cover": current.Variables(7).Value(),
-        "wind_speed_10m": current.Variables(8).Value(),
-        "wind_direction_10m": current.Variables(9).Value(),
-        "wind_gusts_10m": current.Variables(10).Value(),
-        "time": current.Time()
+# Weather color mapping for better visual distinction
+def get_weather_color(weather_type):
+    """Return color for weather type"""
+    color_map = {
+        'Clear': '#FFD700',  # Gold
+        'Sunny': '#FFA500',  # Orange
+        'Mainly Clear': '#87CEEB',  # Sky Blue
+        'Partly Cloudy': '#B0C4DE',  # Light Steel Blue
+        'Cloudy': '#696969',  # Dim Gray
+        'Overcast': '#808080',  # Gray
+        'Foggy': '#D3D3D3',  # Light Gray
+        'Mist': '#E6E6FA',  # Lavender
+        'Light Rain': '#6495ED',  # Cornflower Blue
+        'Rain': '#0000FF',  # Blue
+        'Heavy Rain': '#000080',  # Navy
+        'Light Snow': '#F0F8FF',  # Alice Blue
+        'Snow': '#FFFFFF',  # White
+        'Heavy Snow': '#E6E6FA',  # Lavender
+        'Thunderstorm': '#4B0082',  # Indigo
+        'Drizzle': '#ADD8E6',  # Light Blue
+        'Showers': '#1E90FF',  # Dodger Blue
+        'Windy': '#A9A9A9',  # Dark Gray
+        'Breezy': '#C0C0C0',  # Silver
+        'Humid': '#20B2AA',  # Light Sea Green
+        'Hot': '#FF4500',  # Orange Red
+        'Warm': '#FF8C00',  # Dark Orange
+        'Mild': '#32CD32',  # Lime Green
+        'Cool': '#00CED1',  # Dark Turquoise
+        'Cold': '#00BFFF',  # Deep Sky Blue
+        'Freezing': '#0000CD'  # Medium Blue
     }
+    return color_map.get(weather_type, '#808080')
 
-    # Hourly forecast
-    hourly = response.Hourly()
-    hourly_data = {
-        "date": pd.date_range(
-            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-            freq=pd.Timedelta(seconds=hourly.Interval()),
-            inclusive="left"
-        )
-    }
-    for idx, var in enumerate(["temperature_2m", "relative_humidity_2m", "dew_point_2m",
-                               "precipitation", "visibility", "surface_pressure",
-                               "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"]):
-        hourly_data[var] = hourly.Variables(idx).ValuesAsNumpy()
-
-    hourly_df = pd.DataFrame(hourly_data)
-    return current_weather, hourly_df
-
-current_weather, hourly_df = fetch_live_weather()
-
-#  SIDEBAR CONTROLS
+# -----------------------------
+# SIDEBAR CONTROLS
+# -----------------------------
 st.sidebar.header("Dashboard Controls")
-view_option = st.sidebar.radio("Select View", ["Current Weather", "Historical Analysis", "Forecasts"])
+view_option = st.sidebar.radio("Select View", ["Current Weather", "Historical Analysis", "Forecasts", "Hourly Predictions"])
 
 # Date range selector for historical data
 if historical_data is not None:
@@ -137,98 +149,64 @@ if historical_data is not None:
         st.sidebar.error("Error: End date must be after start date.")
         historical_start, historical_end = default_start, default_end
 
+# -----------------------------
 # CURRENT WEATHER VIEW
+# -----------------------------
 if view_option == "Current Weather":
     st.subheader("Current Weather Conditions")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Temperature", f"{current_weather['temperature_2m']:.1f} °C")
-    col2.metric("Feels Like", f"{current_weather['apparent_temperature']:.1f} °C")
-    col3.metric("Humidity", f"{current_weather['relative_humidity_2m']:.1f}%")
-    col4.metric("Wind Speed", f"{current_weather['wind_speed_10m']:.1f} km/h")
-    
-    col5, col6, col7, col8 = st.columns(4)
-    col5.metric("Precipitation", f"{current_weather['precipitation']:.1f} mm")
-    col6.metric("Cloud Cover", f"{current_weather['cloud_cover']:.1f}%")
-    col7.metric("Wind Direction", f"{current_weather['wind_direction_10m']:.0f}°")
-    col8.metric("Wind Gusts", f"{current_weather['wind_gusts_10m']:.1f} km/h")
-    
-    # Weather condition based on weather code
-    weather_codes = {
-        0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-        45: "Fog", 48: "Depositing rime fog", 51: "Light drizzle", 53: "Moderate drizzle",
-        55: "Dense drizzle", 56: "Light freezing drizzle", 57: "Dense freezing drizzle",
-        61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-        66: "Light freezing rain", 67: "Heavy freezing rain", 71: "Slight snow fall",
-        73: "Moderate snow fall", 75: "Heavy snow fall", 77: "Snow grains",
-        80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-        85: "Slight snow showers", 86: "Heavy snow showers", 95: "Thunderstorm",
-        96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
-    }
-    
-    weather_desc = weather_codes.get(int(current_weather['weather_code']), "Unknown")
-    st.info(f"**Current conditions:** {weather_desc}")
-    
-    # Hourly forecast chart
-    st.subheader("Hourly Forecast (Next 24 Hours)")
-    hourly_next24 = hourly_df[['date', 'temperature_2m', 'relative_humidity_2m', 
-                              'precipitation', 'wind_speed_10m']].head(24).copy()
-    hourly_next24['hour'] = hourly_next24['date'].dt.strftime("%H:%M")
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["Temperature", "Humidity", "Precipitation", "Wind"])
-    
-    with tab1:
-        chart = alt.Chart(hourly_next24).mark_line(point=True).encode(
-            x=alt.X('hour:N', title='Hour'),
-            y=alt.Y('temperature_2m:Q', title='Temperature (°C)'),
-            tooltip=['hour', 'temperature_2m']
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-    
-    with tab2:
-        chart = alt.Chart(hourly_next24).mark_line(point=True, color='green').encode(
-            x=alt.X('hour:N', title='Hour'),
-            y=alt.Y('relative_humidity_2m:Q', title='Humidity (%)'),
-            tooltip=['hour', 'relative_humidity_2m']
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-    
-    with tab3:
-        chart = alt.Chart(hourly_next24).mark_bar(color='red').encode(
-            x=alt.X('hour:N', title='Hour'),
-            y=alt.Y('precipitation:Q', title='Precipitation (mm)'),
-            tooltip=['hour', 'precipitation']
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-    
-    with tab4:
-        chart = alt.Chart(hourly_next24).mark_line(point=True, color='purple').encode(
-            x=alt.X('hour:N', title='Hour'),
-            y=alt.Y('wind_speed_10m:Q', title='Wind Speed (km/h)'),
-            tooltip=['hour', 'wind_speed_10m']
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
+    if historical_data is not None:
+        current = historical_data.iloc[-1]
+        
+        # Display current weather metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Temperature", f"{current['temperature_2m']:.1f} °C")
+        col2.metric("Feels Like", f"{current['temperature_2m']:.1f} °C")
+        col3.metric("Humidity", f"{current['relative_humidity_2m']:.1f}%")
+        col4.metric("Wind Speed", f"{current['wind_speed_10m']:.1f} km/h")
+        
+        col5, col6, col7, col8 = st.columns(4)
+        col5.metric("Precipitation", f"{current['precipitation']:.1f} mm")
+        col6.metric("Cloud Cover", f"{current.get('cloud_cover', 0):.1f}%")
+        col7.metric("Wind Direction", f"{current['wind_direction_10m']:.0f}°")
+        col8.metric("Wind Gusts", f"{current['wind_gusts_10m']:.1f} km/h")
+        
+        # Weather description with icon
+        weather_codes = {
+            0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+            45: "Fog", 48: "Depositing rime fog", 51: "Light drizzle", 53: "Moderate drizzle",
+            55: "Dense drizzle", 56: "Light freezing drizzle", 57: "Dense freezing drizzle",
+            61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+            66: "Light freezing rain", 67: "Heavy freezing rain", 71: "Slight snow fall",
+            73: "Moderate snow fall", 75: "Heavy snow fall", 77: "Snow grains",
+            80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+            85: "Slight snow showers", 86: "Heavy snow showers", 95: "Thunderstorm",
+            96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
+        }
+        current_weather_code = current.get('weather_code', 0)
+        current_weather_desc = weather_codes.get(current_weather_code, 'Unknown')
+        icon = get_weather_icon(current_weather_desc.split()[0])
+        
+        st.info(f"**Current conditions:** {icon} {current_weather_desc}")
 
-#HISTORICAL ANALYSIS VIEW 
+# -----------------------------
+# HISTORICAL ANALYSIS VIEW
+# -----------------------------
 elif view_option == "Historical Analysis" and historical_data is not None:
-    st.subheader(" Historical Weather Analysis")
+    st.subheader("Historical Weather Analysis")
     
-    # Filter historical data based on selected date range
     filtered_data = historical_data[
-        (historical_data['time'].dt.date >= historical_start) & 
+        (historical_data['time'].dt.date >= historical_start) &
         (historical_data['time'].dt.date <= historical_end)
     ]
     
     if filtered_data.empty:
         st.warning("No data available for the selected date range.")
     else:
-        # Select variable to analyze
         analysis_var = st.selectbox(
             "Select variable to analyze:",
             ["temperature_2m", "relative_humidity_2m", "precipitation", "wind_speed_10m"]
         )
         
-        # Display summary statistics
         st.write("**Summary Statistics**")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Average", f"{filtered_data[analysis_var].mean():.2f}")
@@ -236,145 +214,261 @@ elif view_option == "Historical Analysis" and historical_data is not None:
         col3.metric("Minimum", f"{filtered_data[analysis_var].min():.2f}")
         col4.metric("Std Deviation", f"{filtered_data[analysis_var].std():.2f}")
         
-        # Time series chart
         st.write("**Time Series**")
         chart = alt.Chart(filtered_data).mark_line().encode(
             x=alt.X('time:T', title='Date'),
-            y=alt.Y(f'{analysis_var}:Q', title=analysis_var.replace('_', ' ').title()),
+            y=alt.Y(f'{analysis_var}:Q', title=analysis_var.replace('_',' ').title()),
             tooltip=['time', analysis_var]
         ).properties(height=400)
         st.altair_chart(chart, use_container_width=True)
-        
-        # Daily averages
-        st.write("**Daily Averages**")
-        daily_avg = filtered_data.resample('D', on='time').mean().reset_index()
-        chart = alt.Chart(daily_avg).mark_bar().encode(
-            x=alt.X('time:T', title='Date'),
-            y=alt.Y(f'{analysis_var}:Q', title=analysis_var.replace('_', ' ').title()),
-            tooltip=['time', analysis_var]
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-        
-        # Hourly averages
-        st.write("**Hourly Averages**")
-        hourly_avg = filtered_data.groupby('hour').mean().reset_index()
-        chart = alt.Chart(hourly_avg).mark_line(point=True).encode(
-            x=alt.X('hour:Q', title='Hour of Day'),
-            y=alt.Y(f'{analysis_var}:Q', title=analysis_var.replace('_', ' ').title()),
-            tooltip=['hour', analysis_var]
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-        
-        # Monthly averages
-        st.write("**Monthly Averages**")
-        monthly_avg = filtered_data.groupby('month').mean().reset_index()
-        chart = alt.Chart(monthly_avg).mark_bar().encode(
-            x=alt.X('month:O', title='Month'),
-            y=alt.Y(f'{analysis_var}:Q', title=analysis_var.replace('_', ' ').title()),
-            tooltip=['month', analysis_var]
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
 
-#FORECASTS VIEW
-elif view_option == "Forecasts":
-    st.subheader(" Weather Forecasts")
-    
-    if all_prophet_models is None:
-        st.error("Prophet models not available. Please run train_weather_model.py first.")
+# -----------------------------
+# HOURLY PREDICTIONS VIEW
+# -----------------------------
+elif view_option == "Hourly Predictions":
+    st.subheader("Hourly Predictions (Next 24 Hours)")
+    if rf_models is not None and model_features is not None and historical_data is not None:
+        try:
+            hourly_preds = []
+            # Create a working copy of the last row
+            last = historical_data.iloc[-1].copy()
+            np_holidays = holidays.Nepal()
+            
+            for i in range(24):
+                # Prepare input features
+                X_input_dict = {}
+                
+                # Add basic time features
+                current_time = last['time'] + pd.Timedelta(hours=1) if i > 0 else last['time']
+                X_input_dict['hour'] = current_time.hour
+                X_input_dict['day'] = current_time.day
+                X_input_dict['month'] = current_time.month
+                X_input_dict['weekday'] = current_time.weekday()
+                X_input_dict['day_of_year'] = current_time.timetuple().tm_yday
+                X_input_dict['is_weekend'] = int(current_time.weekday() in [5, 6])
+                X_input_dict['is_holiday'] = int(current_time in np_holidays)
+                
+                # Add lag features using historical data
+                for feature in model_features:
+                    if '_lag_' in feature:
+                        base_col = '_'.join(feature.split('_')[:-2])
+                        lag_hours = int(feature.split('_')[-1])
+                        
+                        # Calculate the timestamp for the lag
+                        lag_time = current_time - pd.Timedelta(hours=lag_hours)
+                        
+                        # Find the historical value for that timestamp
+                        historical_match = historical_data[historical_data['time'] == lag_time]
+                        if not historical_match.empty:
+                            X_input_dict[feature] = historical_match[base_col].iloc[0]
+                        else:
+                            # If no exact match, use the most recent available value
+                            earlier_data = historical_data[historical_data['time'] <= lag_time]
+                            if not earlier_data.empty:
+                                X_input_dict[feature] = earlier_data[base_col].iloc[-1]
+                            else:
+                                X_input_dict[feature] = historical_data[base_col].iloc[0]
+                    
+                    elif 'rolling' in feature:
+                        # For rolling features, use historical averages
+                        parts = feature.split('_')
+                        base_col = '_'.join(parts[:2])  # e.g., 'temp_rolling_mean_3' -> 'temp_rolling'
+                        window = int(parts[-1])
+                        
+                        # Use recent historical data for rolling calculations
+                        recent_data = historical_data.tail(window * 2)  # Get enough data for calculation
+                        if not recent_data.empty and base_col.split('_')[0] in recent_data.columns:
+                            if 'mean' in feature:
+                                X_input_dict[feature] = recent_data[base_col.split('_')[0]].mean()
+                            elif 'std' in feature:
+                                X_input_dict[feature] = recent_data[base_col.split('_')[0]].std()
+                        else:
+                            X_input_dict[feature] = historical_data[base_col.split('_')[0]].mean() if base_col.split('_')[0] in historical_data.columns else 0
+                
+                # Create input DataFrame with proper feature order
+                X_input = pd.DataFrame([X_input_dict])[model_features]
+                
+                # Make predictions
+                pred_row = {'time': current_time + pd.Timedelta(hours=1)}
+                
+                # Predict numerical values
+                for target in ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 'precipitation']:
+                    if target in rf_models:
+                        pred = rf_models[target].predict(X_input)[0]
+                        pred_row[target] = pred
+                
+                # Predict weather type
+                if 'weather_type' in rf_models:
+                    weather_pred = rf_models['weather_type'].predict(X_input)[0]
+                    pred_row['weather_type'] = weather_pred
+                    pred_row['weather_icon'] = get_weather_icon(weather_pred)
+                    pred_row['weather_color'] = get_weather_color(weather_pred)
+                
+                hourly_preds.append(pred_row)
+                
+                # Update the last values for next iteration (only for base features)
+                for target in ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 'precipitation']:
+                    if target in last:
+                        last[target] = pred_row[target]
+
+            # Display results
+            hourly_df = pd.DataFrame(hourly_preds)
+            st.write("**Next 24 Hours Forecast**")
+            
+            # Create a styled dataframe with weather icons
+            display_data = []
+            for _, row in hourly_df.iterrows():
+                display_row = {
+                    'Time': row['time'].strftime('%Y-%m-%d %H:%M'),
+                    'Temperature': f"{row['temperature_2m']:.1f}°C",
+                    'Humidity': f"{row['relative_humidity_2m']:.1f}%",
+                    'Wind Speed': f"{row['wind_speed_10m']:.1f} km/h",
+                    'Precipitation': f"{row['precipitation']:.2f} mm",
+                    'Weather': f"{row.get('weather_icon', '')} {row.get('weather_type', 'Unknown')}"
+                }
+                display_data.append(display_row)
+            
+            display_df = pd.DataFrame(display_data)
+            st.dataframe(display_df, use_container_width=True)
+            
+            # Add charts and visualizations
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Temperature Forecast**")
+                temp_chart = alt.Chart(hourly_df).mark_line(color='red').encode(
+                    x=alt.X('time:T', title='Time'),
+                    y=alt.Y('temperature_2m:Q', title='Temperature (°C)'),
+                    tooltip=['time', 'temperature_2m']
+                ).properties(height=300)
+                st.altair_chart(temp_chart, use_container_width=True)
+            
+            with col2:
+                st.write("**Weather Conditions Timeline**")
+                if 'weather_type' in hourly_df.columns and 'weather_color' in hourly_df.columns:
+                    # Create a timeline chart with colored points for weather types
+                    timeline_chart = alt.Chart(hourly_df).mark_circle(size=100).encode(
+                        x=alt.X('time:T', title='Time'),
+                        y=alt.Y('temperature_2m:Q', title='Temperature (°C)'),
+                        color=alt.Color('weather_type:N', scale=alt.Scale(
+                            domain=list(set(hourly_df['weather_type'])),
+                            range=[get_weather_color(wt) for wt in set(hourly_df['weather_type'])]
+                        )),
+                        tooltip=['time', 'temperature_2m', 'weather_type']
+                    ).properties(height=300)
+                    st.altair_chart(timeline_chart, use_container_width=True)
+            
+            # Weather distribution
+            st.write("**Weather Distribution**")
+            if 'weather_type' in hourly_df.columns:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Count weather types for bar chart
+                    weather_counts = hourly_df['weather_type'].value_counts().reset_index()
+                    weather_counts.columns = ['Weather Type', 'Count']
+                    
+                    bar_chart = alt.Chart(weather_counts).mark_bar().encode(
+                        x=alt.X('Count:Q', title='Hours'),
+                        y=alt.Y('Weather Type:N', title='Weather Type', sort='-x'),
+                        color=alt.Color('Weather Type:N', scale=alt.Scale(
+                            domain=weather_counts['Weather Type'].tolist(),
+                            range=[get_weather_color(wt) for wt in weather_counts['Weather Type']]
+                        )),
+                        tooltip=['Weather Type', 'Count']
+                    ).properties(height=300)
+                    st.altair_chart(bar_chart, use_container_width=True)
+                
+                with col2:
+                    # Pie chart
+                    pie_chart = alt.Chart(weather_counts).mark_arc().encode(
+                        theta='Count:Q',
+                        color=alt.Color('Weather Type:N', scale=alt.Scale(
+                            domain=weather_counts['Weather Type'].tolist(),
+                            range=[get_weather_color(wt) for wt in weather_counts['Weather Type']]
+                        )),
+                        tooltip=['Weather Type', 'Count']
+                    ).properties(height=300)
+                    st.altair_chart(pie_chart, use_container_width=True)
+            
+            # Summary statistics
+            st.write("**Forecast Summary**")
+            if 'weather_type' in hourly_df.columns:
+                dominant_weather = hourly_df['weather_type'].mode().iloc[0] if not hourly_df['weather_type'].mode().empty else 'Unknown'
+                avg_temp = hourly_df['temperature_2m'].mean()
+                total_precip = hourly_df['precipitation'].sum()
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Dominant Weather", f"{get_weather_icon(dominant_weather)} {dominant_weather}")
+                col2.metric("Average Temperature", f"{avg_temp:.1f}°C")
+                col3.metric("Max Temperature", f"{hourly_df['temperature_2m'].max():.1f}°C")
+                col4.metric("Total Precipitation", f"{total_precip:.2f} mm")
+        
+        except Exception as e:
+            st.error(f"Error generating hourly predictions: {e}")
+            st.info("This might be due to missing historical data for lag features. Try using a different date range.")
     else:
-        # Daily forecast with Prophet
+        st.error("Models not loaded. Please run train_weather_model.py first to train the models.")
+
+# -----------------------------
+# FORECAST VIEW
+# -----------------------------
+elif view_option == "Forecasts":
+    st.subheader("Weather Forecasts")
+    if prophet_models is not None:
         feature_choice = st.selectbox(
             "Select variable to forecast:",
             ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "precipitation"]
         )
         
-        daily_model = all_prophet_models[feature_choice]
-        future = daily_model.make_future_dataframe(periods=7, freq="D")
-        forecast = daily_model.predict(future)
-        
-        daily_forecast = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(7)
-        daily_forecast['ds'] = pd.to_datetime(daily_forecast['ds']).dt.date
-        
-        st.write("**7-Day Forecast**")
-        st.table(daily_forecast.rename(columns={
-            'ds': 'Date', 
-            'yhat': f'{feature_choice} Forecast',
-            'yhat_lower': 'Lower Bound',
-            'yhat_upper': 'Upper Bound'
-        }))
-        
-        # Forecast chart with confidence intervals
-        chart = alt.Chart(daily_forecast).mark_line(point=True).encode(
-            x=alt.X('ds:T', title='Date'),
-            y=alt.Y('yhat:Q', title=f'{feature_choice} Forecast'),
-            tooltip=['ds', 'yhat', 'yhat_lower', 'yhat_upper']
-        ).properties(height=300)
-        
-        # Add confidence interval
-        band = alt.Chart(daily_forecast).mark_area(opacity=0.3).encode(
-            x='ds:T',
-            y='yhat_lower:Q',
-            y2='yhat_upper:Q'
-        )
-        
-        st.altair_chart(chart + band, use_container_width=True)
-        
-        # Compare with historical data if available
-        if historical_data is not None:
-            st.write("**Comparison with Historical Averages**")
+        if feature_choice in prophet_models:
+            model = prophet_models[feature_choice]
+            future = model.make_future_dataframe(periods=7, freq="D")
+            forecast = model.predict(future)
+            daily_forecast = forecast[['ds','yhat','yhat_lower','yhat_upper']].tail(7)
+            daily_forecast['ds'] = pd.to_datetime(daily_forecast['ds']).dt.date
             
-            # Get historical averages for the same dates
-            historical_compare = historical_data.copy()
-            historical_compare['day_month'] = historical_compare['time'].dt.strftime('%m-%d')
-            historical_avg = historical_compare.groupby('day_month')[feature_choice].mean().reset_index()
+            st.write("**7-Day Forecast**")
             
-            # Create comparison data
-            forecast_compare = daily_forecast.copy()
-            forecast_compare['day_month'] = forecast_compare['ds'].apply(lambda x: x.strftime('%m-%d'))
+            # Format the table nicely
+            formatted_forecast = daily_forecast.copy()
+            formatted_forecast['yhat'] = formatted_forecast['yhat'].round(2)
+            formatted_forecast['yhat_lower'] = formatted_forecast['yhat_lower'].round(2)
+            formatted_forecast['yhat_upper'] = formatted_forecast['yhat_upper'].round(2)
             
-            comparison_df = forecast_compare.merge(historical_avg, on='day_month', how='left')
-            comparison_df = comparison_df.rename(columns={feature_choice: 'historical_avg'})
+            st.table(formatted_forecast.rename(columns={
+                'ds': 'Date',
+                'yhat': f'{feature_choice.replace("_", " ").title()} Forecast',
+                'yhat_lower': 'Lower Bound',
+                'yhat_upper': 'Upper Bound'
+            }))
             
-            if not comparison_df.empty:
-                # Melt for Altair
-                comparison_melt = comparison_df.melt(id_vars=['ds'], value_vars=['yhat', 'historical_avg'], 
-                                                    var_name='Type', value_name='Value')
-                comparison_melt['Type'] = comparison_melt['Type'].replace({
-                    'yhat': 'Forecast', 
-                    'historical_avg': 'Historical Average'
-                })
-                
-                comp_chart = alt.Chart(comparison_melt).mark_line(point=True).encode(
-                    x='ds:T',
-                    y='Value:Q',
-                    color='Type:N',
-                    tooltip=['ds', 'Type', 'Value']
-                ).properties(height=300)
-                
-                st.altair_chart(comp_chart, use_container_width=True)
-                
-                # Calculate difference
-                comparison_df['difference'] = comparison_df['yhat'] - comparison_df['historical_avg']
-                st.write("**Difference from Historical Average**")
-                st.table(comparison_df[['ds', 'yhat', 'historical_avg', 'difference']].rename(columns={
-                    'ds': 'Date', 
-                    'yhat': 'Forecast',
-                    'historical_avg': 'Historical Avg',
-                    'difference': 'Difference'
-                }))
+            # Add a chart for the forecast
+            st.write("**Forecast Trend**")
+            forecast_chart = alt.Chart(daily_forecast).mark_line(point=True).encode(
+                x=alt.X('ds:T', title='Date'),
+                y=alt.Y('yhat:Q', title=f'{feature_choice.replace("_", " ").title()}'),
+                tooltip=['ds', 'yhat']
+            ).properties(height=300)
+            st.altair_chart(forecast_chart, use_container_width=True)
+        else:
+            st.error(f"No Prophet model available for {feature_choice}")
+    else:
+        st.error("Prophet models not available. Please run train_weather_model.py first.")
 
-# FOOTER 
+# -----------------------------
+# FOOTER
+# -----------------------------
 st.sidebar.markdown("---")
 st.sidebar.info(
     """
     **Data Sources:**
     - Historical data: open-meteo-27.75N85.50E1293mNew.csv
-    - Current weather: Open-Meteo API
-    - Forecasts: Prophet models trained on historical data
+    - Forecasts: Random Forest & Prophet models trained on historical data
+    - Weather types: Classified based on temperature, humidity, precipitation, and wind
     """
 )
 
-# Show data info in sidebar
 if historical_data is not None:
     st.sidebar.write(f"Historical data range: {historical_data['time'].min().date()} to {historical_data['time'].max().date()}")
     st.sidebar.write(f"Total records: {len(historical_data):,}")
