@@ -1,210 +1,203 @@
-#train_weather_model
+# train_model.py
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split, TimeSeriesSplit
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import mean_squared_error
 import joblib
 import holidays
-from prophet import Prophet
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
 
-print("Loading historical data...")
-df = pd.read_csv("open-meteo-27.75N85.50E1293mNew.csv")
-df['time'] = pd.to_datetime(df['time'])
-df = df.sort_values('time').reset_index(drop=True)
+print("Starting Advanced Weather Model Training...")
 
-# Feature Engineering
-df['hour'] = df['time'].dt.hour
-df['day'] = df['time'].dt.day
-df['month'] = df['time'].dt.month
-df['weekday'] = df['time'].dt.weekday
-df['day_of_year'] = df['time'].dt.dayofyear
-df['is_weekend'] = df['weekday'].isin([5,6]).astype(int)
+class WeatherConditionPredictor:
+    @staticmethod
+    def predict_condition(row):
+        try:
+            temp = row.get('temperature_2m', 20)
+            precip = row.get('precipitation', 0)
+            cloud_cover = row.get('cloud_cover', 0)
+            wind_speed = row.get('wind_speed_10m', 0)
+            humidity = row.get('relative_humidity_2m', 60)
+            if precip > 8.0 and cloud_cover > 85 and wind_speed > 25:
+                return 'Thunderstorm'
+            elif precip > 5.0:
+                return 'Heavy Rain'
+            elif precip > 2.0:
+                return 'Moderate Rain'
+            elif precip > 0.5:
+                return 'Light Rain'
+            elif precip > 0.1:
+                return 'Drizzle'
+            elif temp < 0 and precip > 0.1:
+                return 'Snow'
+            elif humidity > 90 and cloud_cover > 80 and wind_speed < 5:
+                return 'Fog'
+            elif cloud_cover > 80:
+                return 'Overcast'
+            elif cloud_cover > 60:
+                return 'Mostly Cloudy'
+            elif cloud_cover > 30:
+                return 'Partly Cloudy'
+            elif wind_speed > 30:
+                return 'Windy'
+            elif wind_speed > 20:
+                return 'Breezy'
+            else:
+                if temp > 28:
+                    return 'Hot'
+                elif temp > 22:
+                    return 'Warm'
+                elif temp > 15:
+                    return 'Pleasant'
+                elif temp > 8:
+                    return 'Cool'
+                else:
+                    return 'Cold'
+        except Exception:
+            return 'Unknown'
 
-# Nepal Holidays
-np_holidays = holidays.Nepal()
-df['is_holiday'] = df['time'].apply(lambda x: x in np_holidays).astype(int)
+class AdvancedFeatureEngineer:
+    def add_seasonal_features(self, df):
+        df['diurnal_temp'] = 8 * np.sin(2 * np.pi * (df['hour'] - 6) / 24)
+        df['seasonal_adj'] = df['month'].apply(self._get_seasonal_adjustment)
+        df['monsoon_effect'] = df['month'].apply(lambda x: -3 if x in [6,7,8,9] else 2)
+        return df
+    def _get_seasonal_adjustment(self, month):
+        adjustments = {1:-5,2:-3,3:2,4:5,5:6,6:4,7:2,8:2,9:3,10:2,11:-1,12:-4}
+        return adjustments.get(month, 0)
+    def add_advanced_lags(self, df):
+        for lag in [1, 3, 6, 12, 24]:
+            df[f'temp_lag_{lag}_adj'] = df['temperature_2m'].shift(lag) + df['diurnal_temp'] - df['diurnal_temp'].shift(lag)
+        if 'pressure_msl' in df.columns:
+            for window in [3, 6, 12]:
+                df[f'pressure_change_{window}h'] = df['pressure_msl'] - df['pressure_msl'].shift(window)
+        return df
 
-# Lag Features
-features_base = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 'precipitation']
-for col in features_base:
-    for lag in [1, 2, 3, 6, 12, 24]:
-        df[f'{col}_lag_{lag}'] = df[col].shift(lag)
+class DataValidator:
+    @staticmethod
+    def validate_dataframe(df):
+        inf_count = np.isinf(df.select_dtypes(include=[np.number])).sum().sum()
+        if inf_count > 0:
+            df = df.replace([np.inf, -np.inf], np.nan)
+        return df
 
-# Rolling statistics
-for window in [3, 6, 12, 24]:
-    df[f'temp_rolling_mean_{window}'] = df['temperature_2m'].rolling(window=window).mean()
-    df[f'temp_rolling_std_{window}'] = df['temperature_2m'].rolling(window=window).std()
-    df[f'humidity_rolling_mean_{window}'] = df['relative_humidity_2m'].rolling(window=window).mean()
+def load_historical_data():
+    print("Loading historical data from CSV...")
+    try:
+        df = pd.read_csv("open-meteo-27.75N85.50E1293m.csv")
+        df['time'] = pd.to_datetime(df['time'])
+        df = df.sort_values('time').reset_index(drop=True)
+        validator = DataValidator()
+        df = validator.validate_dataframe(df)
+        need = ['temperature_2m','relative_humidity_2m','dew_point_2m','precipitation','pressure_msl','cloud_cover','wind_speed_10m']
+        for c in need:
+            if c not in df.columns:
+                df[c] = np.nan
+        df[need] = df[need].interpolate(limit_direction='both')
+        print(f"Successfully loaded {len(df)} records")
+        print(f"Date range: {df['time'].min()} to {df['time'].max()}")
+        return df
+    except Exception as e:
+        print(f"Error loading CSV file: {e}")
+        return None
 
-# Create weather type labels based on conditions
-def categorize_weather(row):
-    """
-    Categorize weather based on temperature, humidity, precipitation, and wind
-    """
-    temp = row['temperature_2m']
-    humidity = row['relative_humidity_2m']
-    precipitation = row['precipitation']
-    wind_speed = row['wind_speed_10m']
-    
-    if precipitation > 5.0:
-        return 'Heavy Rain'
-    elif precipitation > 0.5:
-        return 'Rain'
-    elif precipitation > 0.1:
-        return 'Light Rain'
-    elif humidity > 90:
-        return 'Foggy'
-    elif humidity > 80:
-        return 'Humid'
-    elif wind_speed > 25:
-        return 'Windy'
-    elif wind_speed > 15:
-        return 'Breezy'
-    elif temp > 30:
-        return 'Hot'
-    elif temp > 25:
-        return 'Warm'
-    elif temp > 15:
-        return 'Mild'
-    elif temp > 5:
-        return 'Cool'
-    elif temp <= 0:
-        return 'Freezing'
+def create_realistic_features(df):
+    print("Creating realistic features...")
+    fe = AdvancedFeatureEngineer()
+    df['hour'] = df['time'].dt.hour
+    df['day'] = df['time'].dt.day
+    df['month'] = df['time'].dt.month
+    df['weekday'] = df['time'].dt.weekday
+    df['day_of_year'] = df['time'].dt.dayofyear
+    df['is_weekend'] = df['weekday'].isin([5, 6]).astype(int)
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour']/24)
+    df['hour_cos'] = np.cos(2 * np.pi * df['hour']/24)
+    df['month_sin'] = np.sin(2 * np.pi * df['month']/12)
+    df['month_cos'] = np.cos(2 * np.pi * df['month']/12)
+    try:
+        np_holidays = holidays.Nepal()
+        df['is_holiday'] = df['time'].apply(lambda x: x in np_holidays).astype(int)
+    except Exception:
+        df['is_holiday'] = 0
+    df = fe.add_seasonal_features(df)
+    features_base = ['temperature_2m','relative_humidity_2m','wind_speed_10m','precipitation','dew_point_2m','cloud_cover','pressure_msl']
+    for col in features_base:
+        for lag in [1, 3, 6, 12, 24]:
+            df[f'{col}_lag_{lag}'] = df[col].shift(lag)
+    df = fe.add_advanced_lags(df)
+    windows = [3, 6, 12, 24]
+    for window in windows:
+        for col in ['temperature_2m','relative_humidity_2m','wind_speed_10m','pressure_msl']:
+            if col in df.columns:
+                df[f'{col}_rolling_mean_{window}'] = df[col].rolling(window=window, min_periods=1).mean()
+                df[f'{col}_rolling_std_{window}'] = df[col].rolling(window=window, min_periods=1).std()
+    return df
+
+def train_accurate_models(df):
+    print("Training Accurate Weather Models...")
+    targets = {'temperature_2m':'regression','precipitation':'regression','wind_speed_10m':'regression','relative_humidity_2m':'regression','cloud_cover':'regression'}
+    base_features = ['hour_sin','hour_cos','month_sin','month_cos','is_weekend','is_holiday','day_of_year','diurnal_temp','seasonal_adj','monsoon_effect']
+    all_features = base_features + [c for c in df.columns if any(x in c for x in ['lag_','rolling_','change_','adj']) and c not in base_features]
+    all_features = [c for c in all_features if c in df.columns]
+    models = {}
+    for target in targets.keys():
+        print(f"Training model for {target}...")
+        if target not in df.columns:
+            print(f"Skipping {target}, not in data")
+            continue
+        temp_df = df.dropna(subset=all_features + [target]).copy()
+        if len(temp_df) < 1000:
+            print(f"Skipping {target}, insufficient samples: {len(temp_df)}")
+            continue
+        X = temp_df[all_features].replace([np.inf,-np.inf], np.nan)
+        y = temp_df[target].replace([np.inf,-np.inf], np.nan)
+        mask = ~(X.isna().any(axis=1) | y.isna())
+        X = X[mask]
+        y = y[mask]
+        if len(X) < 500:
+            print(f"Skipping {target}, valid rows: {len(X)}")
+            continue
+        model = RandomForestRegressor(n_estimators=300,max_depth=22,min_samples_split=3,min_samples_leaf=1,max_features='sqrt',random_state=42,n_jobs=-1,bootstrap=True)
+        model.fit(X, y)
+        models[target] = model
+        tscv = TimeSeriesSplit(n_splits=3)
+        scores = []
+        for tr, te in tscv.split(X):
+            Xm_tr, Xm_te = X.iloc[tr], X.iloc[te]
+            ym_tr, ym_te = y.iloc[tr], y.iloc[te]
+            m = RandomForestRegressor(n_estimators=150,max_depth=18,random_state=42,n_jobs=-1)
+            m.fit(Xm_tr, ym_tr)
+            yp = m.predict(Xm_te)
+            rmse = float(np.sqrt(mean_squared_error(ym_te, yp)))
+            scores.append(rmse)
+        print(f"  Cross-validation RMSE: {np.mean(scores):.3f}")
+    if models:
+        joblib.dump(models, "weather_models.pkl")
+        joblib.dump(all_features, "model_features.pkl")
+        print(f"Successfully trained {len(models)} models")
+    return models, all_features
+
+def main():
+    print("=" * 50)
+    print("ACCURATE WEATHER MODEL TRAINING")
+    print("=" * 50)
+    df = load_historical_data()
+    if df is None:
+        return
+    df = create_realistic_features(df)
+    df = df.dropna()
+    print(f"Final training dataset: {len(df)} records")
+    if len(df) < 1000:
+        print("Insufficient data for training")
+        return
+    models, features = train_accurate_models(df)
+    if models:
+        print("Model training completed successfully!")
     else:
-        return 'Clear'
+        print("Model training failed")
 
-# Apply weather categorization
-df['weather_type'] = df.apply(categorize_weather, axis=1)
-
-# Alternative: Use weather_code if available in your data
-weather_code_mapping = {
-    0: 'Clear', 1: 'Mainly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
-    45: 'Foggy', 48: 'Foggy', 51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle',
-    56: 'Light Freezing Drizzle', 57: 'Freezing Drizzle', 61: 'Light Rain', 
-    63: 'Rain', 65: 'Heavy Rain', 66: 'Light Freezing Rain', 67: 'Freezing Rain',
-    71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow', 77: 'Snow Grains',
-    80: 'Light Showers', 81: 'Showers', 82: 'Heavy Showers', 85: 'Light Snow Showers',
-    86: 'Snow Showers', 95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 
-    99: 'Thunderstorm with Heavy Hail'
-}
-
-# If weather_code column exists, use it for more accurate weather types
-if 'weather_code' in df.columns:
-    df['weather_type'] = df['weather_code'].map(weather_code_mapping).fillna('Clear')
-
-df.dropna(inplace=True)
-
-# Features for the model
-feature_cols = ['hour', 'day', 'month', 'weekday', 'day_of_year', 'is_weekend', 'is_holiday']
-for col in features_base:
-    for lag in [1, 2, 3, 6, 12, 24]:
-        feature_cols.append(f'{col}_lag_{lag}')
-for col in df.columns:
-    if 'rolling' in col:
-        feature_cols.append(col)
-
-# Train Random Forest Models for numerical predictions
-rf_models = {}
-for target in features_base:
-    print(f"\nTraining Random Forest model for {target}...")
-    X = df[feature_cols]
-    y = df[target]
-
-    # TimeSeriesSplit
-    tscv = TimeSeriesSplit(n_splits=5)
-    rmses = []
-
-    for train_index, test_index in tscv.split(X):
-        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
-
-        model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
-        model.fit(X_train, y_train)
-
-        y_pred = model.predict(X_test)
-        rmse = mean_squared_error(y_test, y_pred) ** 0.5
-        rmses.append(rmse)
-
-    print(f"{target} → CV RMSE: {np.mean(rmses):.3f} ± {np.std(rmses):.3f}")
-
-    # Train final model on all data
-    final_model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
-    final_model.fit(X, y)
-    rf_models[target] = final_model
-
-# Train Random Forest Classifier for weather type
-print("\nTraining Random Forest model for weather type...")
-X_weather = df[feature_cols]
-y_weather = df['weather_type']
-
-# TimeSeriesSplit for weather type
-tscv_weather = TimeSeriesSplit(n_splits=5)
-accuracies = []
-
-for train_index, test_index in tscv_weather.split(X_weather):
-    X_train, X_test = X_weather.iloc[train_index], X_weather.iloc[test_index]
-    y_train, y_test = y_weather.iloc[train_index], y_weather.iloc[test_index]
-
-    model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    accuracies.append(accuracy)
-
-print(f"Weather Type → CV Accuracy: {np.mean(accuracies):.3f} ± {np.std(accuracies):.3f}")
-
-# Train final weather type model on all data
-weather_type_model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
-weather_type_model.fit(X_weather, y_weather)
-rf_models['weather_type'] = weather_type_model
-
-# Save Random Forest models
-joblib.dump(rf_models, "hourly_weather_model.pkl")
-print("\nAll Random Forest models saved as hourly_weather_model.pkl")
-
-# Train Prophet models for daily forecasts
-print("\nTraining Prophet models for daily forecasts...")
-prophet_models = {}
-
-# Prepare data for Prophet (daily aggregation)
-df_daily = df.copy()
-df_daily['date'] = df_daily['time'].dt.date
-daily_agg = df_daily.groupby('date').agg({
-    'temperature_2m': 'mean',
-    'relative_humidity_2m': 'mean', 
-    'wind_speed_10m': 'mean',
-    'precipitation': 'sum'
-}).reset_index()
-
-for target in features_base:
-    print(f"Training Prophet model for {target}...")
-    
-    # Prepare data in Prophet format
-    prophet_df = daily_agg[['date', target]].copy()
-    prophet_df.columns = ['ds', 'y']
-    prophet_df = prophet_df.dropna()
-    
-    # Create and fit Prophet model
-    model = Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=True,
-        daily_seasonality=False,
-        changepoint_prior_scale=0.05
-    )
-    
-    model.fit(prophet_df)
-    prophet_models[target] = model
-
-# Save Prophet models
-joblib.dump(prophet_models, "prophet_models.pkl")
-print("All Prophet models saved as prophet_models.pkl")
-
-print("\nTraining completed successfully!")
-print("Available models:")
-print("- Temperature prediction")
-print("- Humidity prediction") 
-print("- Wind speed prediction")
-print("- Precipitation prediction")
-print("- Weather type classification")
+if __name__ == "__main__":
+    main()
