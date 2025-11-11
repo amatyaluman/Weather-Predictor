@@ -1,6 +1,4 @@
-# FULL CODE WITH FONTAWESOME ICONS - FIXED HTML
-# (no logic changed)
-
+#weather_dashboard.py
 import streamlit as st
 import pandas as pd
 import joblib
