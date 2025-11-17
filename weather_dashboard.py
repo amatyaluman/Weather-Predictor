@@ -1,781 +1,828 @@
 # weather_dashboard.py
 import streamlit as st
 import pandas as pd
-import joblib
 import numpy as np
+import joblib
 from datetime import datetime, timedelta
+import requests
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import requests
-import holidays
-from sklearn.ensemble import RandomForestRegressor
 import warnings
 warnings.filterwarnings('ignore')
 
+# ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="Weather Intelligence System",
-    page_icon="logo.png",
+    page_title="Kathmandu Weather Forecasting System",
+    page_icon="🌤️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Session State
+if 'forecast_generated' not in st.session_state:
+    st.session_state.forecast_generated = False
+if 'current_forecast' not in st.session_state:
+    st.session_state.current_forecast = None
+if 'historical_data' not in st.session_state:
+    st.session_state.historical_data = None
+
+# ==================== ENHANCED CSS ====================
 st.markdown("""
 <style>
-    @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    .main-header {
-        font-size: 2rem;
-        color: #6873de;
-        text-align: center;
-        margin-bottom: 1rem;
-        font-weight: 700;
+    .main {background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); font-family: 'Inter', sans-serif; color: #1e293b;}
+    
+    .header-title {
+        font-size: 3rem; 
+        font-weight: 800; 
+        text-align: center; 
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 1.5rem 0 0.5rem 0;
+        padding: 0.5rem;
     }
-    .card {
-        background: white;
-        padding: 1rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        border: 1px solid #e3f2fd;
+    
+    .header-subtitle {
+        text-align: center; 
+        color: #64748b; 
+        font-size: 1.2rem; 
+        font-weight: 400;
+        margin-bottom: 2.5rem;
+    }
+    
+    .section-header {
+        font-size: 1.8rem; 
+        font-weight: 700; 
+        color: #1e40af; 
+        margin: 2.5rem 0 1.5rem 0; 
+        padding-bottom: 0.7rem; 
+        border-bottom: 3px solid #3b82f6;
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .metric-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        padding: 1.8rem; 
+        border-radius: 16px; 
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1); 
+        text-align: center; 
+        border: 1px solid #e2e8f0; 
+        transition: all 0.4s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-8px); 
+        box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+    }
+    
+    .metric-value {
+        font-size: 2.6rem; 
+        font-weight: 800; 
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin: 0.5rem 0;
     }
-    .metric-card {
-        background: #1a237e;
-        color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        text-align: center;
-        margin: 0.3rem;
-        box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-        height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
+    
     .metric-label {
-        font-size: 1.1em;
-        margin-bottom: 0.5em;
-        opacity: 0.9;
-    }
-    .metric-value {
-        font-size: 1.8em;
-        font-weight: bold;
-        margin-bottom: 0.2em;
-    }
-    .metric-caption {
-        font-size: 0.8em;
-        opacity: 0.8;
-        margin-top: 0.5em;
-    }
-    .prediction-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.3rem;
-        border-left: 4px solid #1a237e;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    }
-    .section-header {
-        font-size: 1.4rem;
-        color: #6873de;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.4rem;
-        border-bottom: 2px solid #5c6bc0;
+        color: #64748b; 
+        font-size: 1.1rem; 
         font-weight: 600;
+        margin-top: 0.5rem;
     }
-    .icon {
-        margin-right: 8px;
-        color: #1a237e;
+    
+    .forecast-card {
+        background: white; 
+        padding: 1.4rem; 
+        border-radius: 14px; 
+        box-shadow: 0 6px 18px rgba(0,0,0,0.08); 
+        border-left: 6px solid #3b82f6; 
+        margin: 0.8rem 0;
+        transition: all 0.3s ease;
     }
-    .metric-icon {
-        font-size: 1.2em;
-        margin-right: 5px;
+    
+    .forecast-card:hover {
+        border-left-color: #1d4ed8; 
+        transform: translateX(8px);
+        box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+    }
+    
+    .condition-badge {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8); 
+        color: white; 
+        padding: 0.5rem 1.2rem; 
+        border-radius: 50px; 
+        font-weight: 600; 
+        font-size: 0.9rem;
+        display: inline-block;
+        margin: 0.5rem 0;
+    }
+    
+    .stButton > button {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white; 
+        border: none; 
+        padding: 0.9rem 2rem; 
+        border-radius: 12px; 
+        font-weight: 600; 
+        width: 100%; 
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+    }
+    
+    .sidebar .sidebar-content {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: white;
+    }
+    
+    .plotly-graph-div {
+        border-radius: 16px; 
+        overflow: hidden; 
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+    
+    .weather-alert {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        border-left: 6px solid #f59e0b;
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 1rem 0;
+    }
+    
+    .data-source {
+        font-size: 0.85rem;
+        color: #64748b;
+        text-align: center;
+        margin-top: 2rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# ==================== ENHANCED CORE CLASSES ====================
 class AdvancedFeatureEngineer:
+    def __init__(self):
+        self.required_features = []
+        
     def add_temporal_features(self, df):
         df['hour'] = df['time'].dt.hour
         df['month'] = df['time'].dt.month
         df['day_of_year'] = df['time'].dt.dayofyear
-        df['weekday'] = df['time'].dt.weekday
-        df['is_weekend'] = df['weekday'].isin([5, 6]).astype(int)
+        df['day_of_week'] = df['time'].dt.dayofweek
+        df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
+        
+        # Cyclical features
         df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
         df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
         df['month_sin'] = np.sin(2 * np.pi * df['month'] / 12)
         df['month_cos'] = np.cos(2 * np.pi * df['month'] / 12)
         df['day_sin'] = np.sin(2 * np.pi * df['day_of_year'] / 365)
         df['day_cos'] = np.cos(2 * np.pi * df['day_of_year'] / 365)
+        
         return df
-    
-    def add_meteorological_features(self, df):
-        df['diurnal_phase'] = 6 * np.sin(2 * np.pi * (df['hour'] - 14) / 24)
-        df['seasonal_adj'] = df['month'].apply(self._get_seasonal_adjustment)
-        df['monsoon_effect'] = df['month'].apply(lambda x: 0.4 if x in [6,7,8,9] else 0.1)
-        if 'pressure_msl' in df.columns:
-            for window in [3, 6, 12, 24]:
-                df[f'pressure_rolling_mean_{window}'] = df['pressure_msl'].shift(1).rolling(window=window, min_periods=1).mean()
-        return df
-    
-    def _get_seasonal_adjustment(self, month):
-        adjustments = {1:-3, 2:-1, 3:2, 4:4, 5:5, 6:3, 7:1, 8:1, 9:2, 10:1, 11:-1, 12:-2}
-        return adjustments.get(month, 0)
-    
+
     def add_lagged_features(self, df, lags=[1, 3, 6, 12, 24]):
-        base_columns = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 
-                       'precipitation', 'pressure_msl', 'cloud_cover']
-        available_columns = [col for col in base_columns if col in df.columns]
-        for col in available_columns:
+        cols = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 
+                'precipitation', 'pressure_msl', 'cloud_cover']
+        
+        for col in [c for c in cols if c in df.columns]:
             for lag in lags:
                 df[f'{col}_lag_{lag}'] = df[col].shift(lag)
+                
         return df
-    
+
     def add_rolling_features(self, df, windows=[3, 6, 12, 24]):
-        base_columns = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 
-                       'pressure_msl', 'cloud_cover']
-        available_columns = [col for col in base_columns if col in df.columns]
-        for col in available_columns:
-            for window in windows:
-                shifted = df[col].shift(1)
-                df[f'{col}_rolling_mean_{window}'] = shifted.rolling(window=window, min_periods=1).mean()
-                df[f'{col}_rolling_std_{window}'] = shifted.rolling(window=window, min_periods=1).std()
-                df[f'{col}_rolling_min_{window}'] = shifted.rolling(window=window, min_periods=1).min()
-                df[f'{col}_rolling_max_{window}'] = shifted.rolling(window=window, min_periods=1).max()
+        cols = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m', 
+                'pressure_msl', 'cloud_cover']
+        
+        for col in [c for c in cols if c in df.columns]:
+            s = df[col].shift(1)
+            for w in windows:
+                df[f'{col}_rolling_mean_{w}'] = s.rolling(w, min_periods=1).mean()
+                df[f'{col}_rolling_std_{w}'] = s.rolling(w, min_periods=1).std()
+                df[f'{col}_rolling_min_{w}'] = s.rolling(w, min_periods=1).min()
+                df[f'{col}_rolling_max_{w}'] = s.rolling(w, min_periods=1).max()
+                
         return df
 
-class AtmosphericPatternLearner:
-    def __init__(self):
-        self.feature_engineer = AdvancedFeatureEngineer()
-        self.patterns_learned = False
-        self.monthly_patterns = {}
-        self.diurnal_patterns = {}
-        self.weather_transitions = {}
+    def add_weather_interactions(self, df):
+        if all(col in df.columns for col in ['temperature_2m', 'relative_humidity_2m']):
+            df['feels_like'] = df['temperature_2m'] + 0.3 * (df['relative_humidity_2m'] / 100 - 0.5)
         
-    def learn_patterns_from_data(self, historical_data):
-        if historical_data is None or len(historical_data) == 0:
-            st.warning("No historical data available for pattern learning")
-            return False
-        try:
-            df = historical_data.copy()
-            df = self.feature_engineer.add_temporal_features(df)
-            df = self.feature_engineer.add_meteorological_features(df)
-            self._learn_monthly_patterns(df)
-            self._learn_diurnal_patterns(df)
-            self._learn_weather_transitions(df)
-            self.patterns_learned = True
-            return True
-        except Exception as e:
-            st.warning(f"Pattern learning limited: {e}")
-            return False
-    
-    def _learn_monthly_patterns(self, df):
-        monthly_stats = df.groupby('month').agg({
-            'temperature_2m': ['mean', 'std'],
-            'precipitation': ['mean', 'std', lambda x: (x > 0.1).mean()],
-            'wind_speed_10m': ['mean', 'std'],
-            'relative_humidity_2m': ['mean', 'std'],
-            'cloud_cover': ['mean', 'std']
-        }).round(3)
-        self.monthly_patterns = monthly_stats.to_dict()
-    
-    def _learn_diurnal_patterns(self, df):
-        hourly_stats = df.groupby('hour').agg({
-            'temperature_2m': ['mean', 'std'],
-            'precipitation': ['mean', 'std'],
-            'wind_speed_10m': ['mean', 'std'],
-            'relative_humidity_2m': ['mean', 'std']
-        }).round(3)
-        self.diurnal_patterns = hourly_stats.to_dict()
-    
-    def _learn_weather_transitions(self, df):
-        df['weather_state'] = df.apply(self._classify_weather_state, axis=1)
-        transitions = []
-        for i in range(1, len(df)):
-            if df['time'].iloc[i] - df['time'].iloc[i-1] == timedelta(hours=1):
-                transitions.append((df['weather_state'].iloc[i-1], df['weather_state'].iloc[i]))
-        transition_counts = {}
-        for prev, curr in transitions:
-            if prev not in transition_counts:
-                transition_counts[prev] = {}
-            transition_counts[prev][curr] = transition_counts[prev].get(curr, 0) + 1
-        self.weather_transitions = {}
-        for prev_state, next_states in transition_counts.items():
-            total = sum(next_states.values())
-            self.weather_transitions[prev_state] = {k: v/total for k, v in next_states.items()}
-    
-    def _classify_weather_state(self, row):
-        temp = row.get('temperature_2m', 20)
-        precip = row.get('precipitation', 0)
-        cloud = row.get('cloud_cover', 50)
-        if precip > 5: return 'rain_heavy'
-        elif precip > 1: return 'rain_light'
-        elif cloud > 80: return 'cloudy'
-        elif cloud > 40: return 'partly_cloudy'
-        elif temp > 28: return 'hot'
-        elif temp > 20: return 'warm'
-        elif temp > 10: return 'cool'
-        else: return 'cold'
+        if all(col in df.columns for col in ['temperature_2m', 'wind_speed_10m']):
+            df['wind_chill'] = 13.12 + 0.6215 * df['temperature_2m'] - 11.37 * (df['wind_speed_10m'] ** 0.16) + 0.3965 * df['temperature_2m'] * (df['wind_speed_10m'] ** 0.16)
+            
+        return df
 
-class RealisticWeatherPredictor:
+    def ensure_features(self, df, features):
+        self.required_features = features
+        for f in features:
+            if f not in df.columns:
+                df[f] = 0.0
+        return df
+
+class AdvancedWeatherPredictor:
     def __init__(self):
-        self.models = None
-        self.features = None
+        self.models = {}
+        self.features = []
         self.engineer = AdvancedFeatureEngineer()
-        self.pattern_learner = AtmosphericPatternLearner()
+        self._load_models()
+        
+    def _load_models(self):
+        """Load pre-trained models with fallback"""
+        targets = ['temperature_2m', 'precipitation', 'wind_speed_10m', 
+                  'relative_humidity_2m', 'cloud_cover', 'pressure_msl']
+        
+        model_loaded = False
+        for t in targets:
+            try:
+                self.models[t] = joblib.load(f"enhanced_weather_model_{t}.pkl")
+                model_loaded = True
+            except Exception as e:
+                st.warning(f"Model for {t} not found: {e}")
+                continue
+                
         try:
-            self.np_holidays = holidays.Nepal()
+            self.features = joblib.load("enhanced_model_features.pkl")
         except:
-            self.np_holidays = {}
+            # Fallback features
+            self.features = ['hour_sin', 'hour_cos', 'month_sin', 'month_cos',
+                           'temperature_2m_lag_1', 'temperature_2m_lag_3',
+                           'precipitation_lag_1', 'precipitation_lag_3',
+                           'relative_humidity_2m_lag_1', 'wind_speed_10m_lag_1']
+            
+        if not model_loaded:
+            st.info("Using statistical forecasting (ML models not available)")
 
-    def load_models(self):
-        try:
-            self.models = joblib.load("weather_models.pkl")
-            self.features = joblib.load("model_features.pkl")
-            return True
-        except FileNotFoundError:
-            return False
-        except Exception as e:
-            st.error(f"Error loading models: {e}")
-            return False
+    def predict_condition(self, row):
+        """Enhanced weather condition prediction"""
+        t = row.get('temperature_2m', 20)
+        p = row.get('precipitation', 0)
+        c = row.get('cloud_cover', 50)
+        w = row.get('wind_speed_10m', 5)
+        h = row.get('relative_humidity_2m', 65)
+        
+        # Enhanced condition logic
+        if p > 8: return "Heavy Rain "
+        elif p > 3: return "Rain "
+        elif p > 0.5: return "Light Rain "
+        elif w > 25: return "Windy "
+        elif w > 15: return "Breezy "
+        elif c > 90 and h > 85: return "Foggy "
+        elif c > 85: return "Overcast "
+        elif c > 60: return "Cloudy "
+        elif c > 30: return "Partly Cloudy "
+        elif t > 30: return "Hot "
+        elif t < 5: return "Cold "
+        else: return "Clear Sky"
 
-    def predict_weather_condition(self, row):
-        try:
-            temp = row.get('temperature_2m', 20)
-            precip = row.get('precipitation', 0)
-            cloud = row.get('cloud_cover', 0)
-            wind = row.get('wind_speed_10m', 0)
-            hum = row.get('relative_humidity_2m', 60)
+    def calculate_comfort_index(self, temp, humidity, wind_speed):
+        """Calculate temperature-humidity-wind comfort index"""
+        # Simple comfort calculation (0-100 scale)
+        temp_comfort = 100 - abs(22 - temp) * 3  # Ideal around 22°C
+        humidity_comfort = 100 - abs(50 - humidity) * 1.2  # Ideal around 50%
+        wind_comfort = min(100, wind_speed * 5)  # Some wind is good
+        
+        return (temp_comfort + humidity_comfort + wind_comfort) / 3
 
-            if precip > 8 and cloud > 85 and wind > 25:
-                return 'Thunderstorm', 'fas fa-bolt'
-            elif precip > 5:
-                return 'Heavy Rain', 'fas fa-cloud-showers-heavy'
-            elif precip > 2:
-                return 'Moderate Rain', 'fas fa-cloud-rain'
-            elif precip > 0.5:
-                return 'Light Rain', 'fas fa-cloud-drizzle'
-            elif precip > 0.1:
-                return 'Drizzle', 'fas fa-cloud-drizzle'
-            elif temp < 0 and precip > 0.1:
-                return 'Snow', 'fas fa-snowflake'
-            elif hum > 90 and cloud > 80 and wind < 5:
-                return 'Fog', 'fas fa-smog'
-            elif cloud > 80:
-                return 'Overcast', 'fas fa-cloud'
-            elif cloud > 60:
-                return 'Mostly Cloudy', 'fas fa-cloud-sun'
-            elif cloud > 30:
-                return 'Partly Cloudy', 'fas fa-cloud-sun'
-            elif wind > 30:
-                return 'Windy', 'fas fa-wind'
-            elif wind > 20:
-                return 'Breezy', 'fas fa-wind'
-            else:
-                if temp > 30:
-                    return 'Hot', 'fas fa-temperature-high'
-                elif temp > 25:
-                    return 'Warm', 'fas fa-sun'
-                elif temp > 18:
-                    return 'Pleasant', 'fas fa-sun'
-                elif temp > 10:
-                    return 'Cool', 'fas fa-temperature-low'
-                else:
-                    return 'Cold', 'fas fa-temperature-low'
-        except:
-            return 'Unknown', 'fas fa-question'
+    def generate_forecast(self, historical_data, hours=24, start_time=None):
+        """Generate weather forecast with enhanced features"""
+        if start_time is None:
+            start_time = datetime.now()
+            
+        df = historical_data.copy()
+        
+        # Feature engineering
+        df = self.engineer.add_temporal_features(df)
+        df = self.engineer.add_lagged_features(df)
+        df = self.engineer.add_rolling_features(df)
+        df = self.engineer.add_weather_interactions(df)
+        df = self.engineer.ensure_features(df, self.features)
+        df = df.fillna(method='ffill').fillna(method='bfill').fillna(0)
 
-    def generate_realistic_predictions(self, historical_data, hours=24, start_date=None):
-        try:
-            if not self.pattern_learner.patterns_learned:
-                self.pattern_learner.learn_patterns_from_data(historical_data)
+        preds = []
+        state = df.tail(100).copy()
+
+        for h in range(hours):
+            t = start_time + timedelta(hours=h+1)
+            X = state.iloc[-1:][self.features]
+
+            pred = {'time': t}
             
             if self.models:
-                hist = historical_data.copy()
-                if hist is None or len(hist) == 0:
-                    raise ValueError("No historical data")
-                
-                now = start_date if start_date else datetime.now()
-                hist = hist[hist['time'] < now]
-                
-                cur = get_current_weather()
-                if cur:
-                    current_row = {
-                        'time': now,
-                        'temperature_2m': cur.get('temperature_2m', 20),
-                        'relative_humidity_2m': cur.get('relative_humidity_2m', 60),
-                        'precipitation': cur.get('precipitation', 0),
-                        'pressure_msl': cur.get('surface_pressure', 870),
-                        'cloud_cover': cur.get('cloud_cover', 50),
-                        'wind_speed_10m': cur.get('wind_speed_10m', 5),
-                    }
-                    hist = pd.concat([hist, pd.DataFrame([current_row])], ignore_index=True)
-                
-                hist = self.engineer.add_temporal_features(hist)
-                hist = self.engineer.add_meteorological_features(hist)
-                hist = self.engineer.add_lagged_features(hist)
-                hist = self.engineer.add_rolling_features(hist)
-                hist['is_holiday'] = hist['time'].apply(lambda x: int(x in self.np_holidays))
-                hist = hist.fillna(method='ffill').fillna(0)
-                
-                lags = [1, 3, 6, 12, 24]
-                windows = [3, 6, 12, 24]
-                max_shift = max(max(lags), max(windows))
-                tail = hist.tail(max_shift).copy()
-                
-                preds = []
-
-                for h in range(hours):
-                    future_time = now + timedelta(hours=h + 1)
-
-                    # Build full feature row
-                    new_row = pd.DataFrame({'time': [future_time]})
-                    temp_df = pd.concat([tail, new_row], ignore_index=True)
-
-                    temp_df = self.engineer.add_temporal_features(temp_df)
-                    temp_df = self.engineer.add_meteorological_features(temp_df)
-                    temp_df = self.engineer.add_lagged_features(temp_df)
-                    temp_df = self.engineer.add_rolling_features(temp_df)
-                    temp_df['is_holiday'] = int(future_time in self.np_holidays)
-                    temp_df = temp_df.fillna(method='ffill').fillna(0)
-
-                    # Extract feature vector (1 row)
-                    X_row = temp_df.iloc[-1:][self.features]
-
-                    row = {'time': future_time}
-                    for target, model in self.models.items():
-                        pred = model.predict(X_row.values)[0]
-                        row[target] = pred
-                        temp_df.at[temp_df.index[-1], target] = pred
-
-                    cond, icon = self.predict_weather_condition(row)
-                    row['weather_condition'] = cond
-                    row['condition_icon'] = icon
-
-                    preds.append(row)
-
-                    # Update rolling window
-                    tail = pd.concat([tail.iloc[1:], temp_df.iloc[-1:]], ignore_index=True)
-                
-                return pd.DataFrame(preds)
-            
+                # Use ML models if available
+                for target, model in self.models.items():
+                    try:
+                        val = float(model.predict(X)[0])
+                        # Apply realistic constraints
+                        if 'precipitation' in target:
+                            val = max(0, val)
+                        elif 'cloud' in target or 'humidity' in target:
+                            val = np.clip(val, 0, 100)
+                        elif 'wind' in target:
+                            val = max(0, val)
+                        pred[target] = val
+                    except Exception as e:
+                        # Fallback to persistence forecast
+                        pred[target] = state[target].iloc[-1] if target in state.columns else 0
             else:
-                # Fallback pattern-based
-                preds = []
-                now = start_date if start_date else datetime.now()
-                cur = get_current_weather()
-                if cur:
-                    current_temp = cur.get('temperature_2m', 20)
-                    current_humidity = cur.get('relative_humidity_2m', 60)
-                    current_pressure = cur.get('surface_pressure', 870)
-                    current_wind = cur.get('wind_speed_10m', 5)
-                    current_cloud = cur.get('cloud_cover', 50)
-                else:
-                    current_temp = 18
-                    current_humidity = 65
-                    current_pressure = 870
-                    current_wind = 8
-                    current_cloud = 40
+                # Statistical forecasting fallback
+                pred.update(self._statistical_forecast(state, h))
+            
+            # Add derived metrics
+            pred['weather_condition'] = self.predict_condition(pred)
+            pred['comfort_index'] = self.calculate_comfort_index(
+                pred.get('temperature_2m', 20),
+                pred.get('relative_humidity_2m', 65),
+                pred.get('wind_speed_10m', 5)
+            )
+            
+            preds.append(pred)
+            state = pd.concat([state, pd.DataFrame([pred])], ignore_index=True)
 
-                for h in range(hours):
-                    prediction_time = now + timedelta(hours=h)
-                    hour_of_day = prediction_time.hour
-                    month = prediction_time.month
-                    
-                    temp_pred = self._predict_temperature(current_temp, hour_of_day, month, h)
-                    precip_pred = self._predict_precipitation(hour_of_day, month, h)
-                    wind_pred = self._predict_wind_speed(current_wind, hour_of_day, h)
-                    humidity_pred = self._predict_humidity(current_humidity, temp_pred, precip_pred, h)
-                    cloud_pred = self._predict_cloud_cover(current_cloud, precip_pred, humidity_pred, h)
-                    pressure_pred = self._predict_pressure(current_pressure, h)
+        return pd.DataFrame(preds)
 
-                    row = {
-                        'time': prediction_time,
-                        'temperature_2m': round(temp_pred, 1),
-                        'precipitation': round(precip_pred, 1),
-                        'wind_speed_10m': round(wind_pred, 1),
-                        'relative_humidity_2m': round(humidity_pred),
-                        'cloud_cover': round(cloud_pred),
-                        'pressure_msl': round(pressure_pred, 1)
-                    }
-
-                    cond, icon = self.predict_weather_condition(row)
-                    row['weather_condition'] = cond
-                    row['condition_icon'] = icon
-
-                    preds.append(row)
-
-                return pd.DataFrame(preds)
-
-        except Exception as e:
-            st.error(f"Prediction error: {e}")
-            return None
-
-    def _predict_temperature(self, current_temp, hour, month, hour_ahead):
-        diurnal_variation = 6 * np.sin(2 * np.pi * (hour - 14) / 24)
-        seasonal_adj = self.pattern_learner.feature_engineer._get_seasonal_adjustment(month)
-        autocorr = 0.8 ** (hour_ahead / 6)
-        random_variation = np.random.normal(0, 1.5)
-        predicted_temp = current_temp * autocorr + diurnal_variation + seasonal_adj + random_variation
-        return max(-10, min(40, predicted_temp))
-
-    def _predict_precipitation(self, hour, month, hour_ahead):
-        monsoon_months = [6, 7, 8, 9]
-        base_prob = 0.3 if month in monsoon_months else 0.05
-        diurnal_effect = 0.2 * np.sin(2 * np.pi * (hour - 16) / 24)
-        horizon_effect = 0.8 ** (hour_ahead / 12)
-        rain_probability = base_prob + diurnal_effect * horizon_effect
-        if np.random.random() < rain_probability:
-            precipitation = np.random.exponential(2.0 if month in monsoon_months else 0.5)
-            return min(20, precipitation)
-        else:
-            return 0.0
-
-    def _predict_wind_speed(self, current_wind, hour, hour_ahead):
-        diurnal_pattern = 2 * np.sin(2 * np.pi * hour / 24)
-        persistence = 0.7 ** (hour_ahead / 8)
-        random_variation = np.random.normal(0, 1.2)
-        predicted_wind = current_wind * persistence + diurnal_pattern + random_variation
-        return max(0, min(60, predicted_wind))
-
-    def _predict_humidity(self, current_humidity, temperature, precipitation, hour_ahead):
-        temp_effect = -0.5 * (temperature - 20)
-        precip_effect = 20 if precipitation > 0.1 else 0
-        persistence = 0.6 ** (hour_ahead / 6)
-        diurnal_effect = 10 * np.sin(2 * np.pi * (hour_ahead % 24 - 4) / 24)
-        predicted_humidity = current_humidity * persistence + temp_effect + precip_effect + diurnal_effect
-        return max(20, min(100, predicted_humidity))
-
-    def _predict_cloud_cover(self, current_cloud, precipitation, humidity, hour_ahead):
-        precip_effect = 40 if precipitation > 0.1 else 0
-        humidity_effect = 0.3 * (humidity - 50)
-        persistence = 0.5 ** (hour_ahead / 8)
-        random_variation = np.random.normal(0, 10)
-        predicted_cloud = current_cloud * persistence + precip_effect + humidity_effect + random_variation
-        return max(0, min(100, predicted_cloud))
-
-    def _predict_pressure(self, current_pressure, hour_ahead):
-        persistence = 0.9 ** (hour_ahead / 24)
-        random_variation = np.random.normal(0, 2)
-        predicted_pressure = current_pressure * persistence + random_variation
-        return max(860, min(890, predicted_pressure))
-
-def get_current_weather():
-    try:
-        params = {
-            'latitude': 27.7172,
-            'longitude': 85.3240,
-            'current': ['temperature_2m','relative_humidity_2m','dew_point_2m','precipitation','surface_pressure','cloud_cover','wind_speed_10m','wind_direction_10m','weather_code'],
-            'timezone': 'Asia/Kathmandu'
-        }
-        r = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=10)
-        d = r.json()
-        return d.get('current')
-    except Exception as e:
-        st.warning(f"Using fallback current weather data: {e}")
+    def _statistical_forecast(self, state, hour_offset):
+        """Statistical forecasting when ML models are unavailable"""
+        base_temp = state['temperature_2m'].iloc[-1]
+        base_humidity = state['relative_humidity_2m'].iloc[-1]
+        base_wind = state['wind_speed_10m'].iloc[-1]
+        base_pressure = state['pressure_msl'].iloc[-1]
+        
+        # Add diurnal cycle and randomness
+        hour = (datetime.now().hour + hour_offset + 1) % 24
+        diurnal_temp = 4 * np.sin(2 * np.pi * (hour - 14) / 24)  # Peak at 2 PM
+        
         return {
-            'temperature_2m':18.5,
-            'relative_humidity_2m':65,
-            'wind_speed_10m':8.2,
-            'surface_pressure':870,
-            'cloud_cover':45,
-            'precipitation':0.0
+            'temperature_2m': base_temp + diurnal_temp + np.random.normal(0, 0.5),
+            'precipitation': max(0, np.random.exponential(0.3)),
+            'wind_speed_10m': max(0, base_wind + np.random.normal(0, 0.8)),
+            'relative_humidity_2m': np.clip(base_humidity + np.random.normal(0, 3), 30, 95),
+            'cloud_cover': np.clip(50 + 30 * np.sin(2 * np.pi * hour / 24) + np.random.normal(0, 10), 0, 100),
+            'pressure_msl': base_pressure + np.random.normal(0, 0.5)
         }
 
-@st.cache_data
+# ==================== ENHANCED DATA SOURCES ====================
+@st.cache_data(ttl=300)
+def get_current_weather():
+    """Get current weather with multiple fallback options"""
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            'latitude': 27.7172, 'longitude': 85.3240,
+            'current': 'temperature_2m,relative_humidity_2m,precipitation,surface_pressure,cloud_cover,wind_speed_10m,is_day',
+            'hourly': 'temperature_2m,precipitation',
+            'timezone': 'Asia/Kathmandu',
+            'forecast_days': 1
+        }
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        current = data['current']
+        return {
+            'temperature_2m': current['temperature_2m'],
+            'relative_humidity_2m': current['relative_humidity_2m'],
+            'precipitation': current['precipitation'],
+            'surface_pressure': current['surface_pressure'],
+            'cloud_cover': current['cloud_cover'],
+            'wind_speed_10m': current['wind_speed_10m'],
+            'is_day': current['is_day']
+        }
+    except Exception as e:
+        st.warning(f"Live weather data unavailable: {e}. Using sample data.")
+        # Return realistic sample data for Kathmandu
+        return {
+            'temperature_2m': 19.2, 
+            'relative_humidity_2m': 68, 
+            'precipitation': 0.0,
+            'surface_pressure': 868, 
+            'cloud_cover': 42, 
+            'wind_speed_10m': 6.8,
+            'is_day': 1
+        }
+
+@st.cache_data(ttl=3600)
 def load_historical_data():
+    """Load historical data with enhanced synthetic data generation"""
     try:
         df = pd.read_csv("open-meteo-27.75N85.50E1293m.csv")
         df['time'] = pd.to_datetime(df['time'])
-        df = df.sort_values('time')
-        return df
+        st.success(" Historical data loaded successfully")
+        return df.sort_values('time').reset_index(drop=True)
     except Exception as e:
-        st.warning(f"Using generated historical data: {e}")
-        dates = pd.date_range(start='2023-01-01', end='2024-01-01', freq='H')
-        np.random.seed(42)
-        base_temp = 15
-        seasonal_variation = 8 * np.sin(2 * np.pi * (dates.month - 3) / 12)
-        diurnal_variation = 8 * np.sin(2 * np.pi * (dates.hour - 14) / 24)
-        temperatures = base_temp + seasonal_variation + diurnal_variation + np.random.normal(0, 2, len(dates))
-        monsoon_months = [6, 7, 8, 9]
-        precip_base = np.where(np.isin(dates.month, monsoon_months), 0.3, 0.05)
-        precipitation = np.random.exponential(precip_base, len(dates))
-        d = {
+        st.warning(f"Historical data file not found: {e}. Generating synthetic data.")
+        
+        # Enhanced synthetic data generation
+        dates = pd.date_range("2023-01-01", periods=8784, freq="H")
+        np.random.seed(42)  # For reproducibility
+        
+        # Base patterns for Kathmandu
+        base_temp = 18 + 8 * np.sin(2 * np.pi * (dates.month - 3) / 12)  # Seasonal
+        diurnal_temp = 7 * np.sin(2 * np.pi * (dates.hour - 14) / 24)    # Daily
+        temp_noise = np.random.normal(0, 1.5, len(dates))
+        
+        return pd.DataFrame({
             'time': dates,
-            'temperature_2m': temperatures,
-            'precipitation': precipitation,
-            'wind_speed_10m': 5 + 3 * np.sin(2 * np.pi * dates.hour / 24) + np.random.normal(0, 1.5, len(dates)),
-            'relative_humidity_2m': 60 + 20 * np.sin(2 * np.pi * (dates.hour - 4) / 24) + np.random.normal(0, 5, len(dates)),
-            'pressure_msl': 870 + 5 * np.sin(2 * np.pi * dates.hour / 24) + np.random.normal(0, 1, len(dates)),
-            'cloud_cover': 40 + 30 * np.sin(2 * np.pi * dates.hour / 24) + np.random.normal(0, 10, len(dates))
-        }
-        return pd.DataFrame(d)
+            'temperature_2m': base_temp + diurnal_temp + temp_noise,
+            'precipitation': np.random.exponential(0.2, len(dates)),
+            'wind_speed_10m': 4 + 3 * np.random.random(len(dates)),
+            'relative_humidity_2m': 65 + 20 * np.sin(2 * np.pi * dates.hour / 24) + np.random.normal(0, 10, len(dates)),
+            'pressure_msl': 870 + 5 * np.sin(2 * np.pi * dates.hour / 24) + np.random.normal(0, 2, len(dates)),
+            'cloud_cover': 50 + 30 * np.random.random(len(dates))
+        })
 
-def display_current_weather():
-    st.markdown("## Current Weather")
-    cur = get_current_weather()
-    if cur:
-        cols = st.columns(4)
-        with cols[0]:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-label'>Temperature</div>
-                <div class='metric-value'>{cur['temperature_2m']:.1f}°C</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with cols[1]:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-label'>Humidity</div>
-                <div class='metric-value'>{cur['relative_humidity_2m']:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with cols[2]:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-label'>Wind Speed</div>
-                <div class='metric-value'>{cur['wind_speed_10m']:.1f} km/h</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with cols[3]:
-            p = cur.get('surface_pressure', 870)
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div class='metric-label'>Pressure</div>
-                <div class='metric-value'>{p:.0f} hPa</div>
-                <div class='metric-caption'>Surface pressure at 1293m</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-def show_hourly_predictions():
-    st.markdown("## Hourly Weather Forecast")
-    st.markdown("<div class='section-header'>Forecast Settings</div>", unsafe_allow_html=True)
-
-    predictor = RealisticWeatherPredictor()
-    models_loaded = predictor.load_models()
-    if models_loaded:
-        st.success("ML models loaded successfully")
-    else:
-        st.warning("Using pattern-based weather prediction (ML models not found)")
+# ==================== UTILITY FUNCTIONS ====================
+def get_weather_alerts(forecast_df):
+    """Generate weather alerts based on forecast"""
+    alerts = []
     
-    hist = load_historical_data()
+    max_temp = forecast_df['temperature_2m'].max()
+    total_rain = forecast_df['precipitation'].sum()
+    max_wind = forecast_df['wind_speed_10m'].max()
+    
+    if max_temp > 32:
+        alerts.append(" High temperature warning: Stay hydrated!")
+    if max_temp < 5:
+        alerts.append(" Low temperature alert: Dress warmly!")
+    if total_rain > 20:
+        alerts.append(" Heavy rainfall expected: Potential flooding!")
+    elif total_rain > 10:
+        alerts.append(" Significant rainfall: Carry umbrella!")
+    if max_wind > 30:
+        alerts.append(" High wind warning: Secure loose objects!")
+    elif max_wind > 20:
+        alerts.append(" Strong winds expected!")
+        
+    return alerts
 
-    c1, c2, c3 = st.columns([1,1,1])
-    with c1:
-        hrs = st.selectbox("Forecast Hours", [12,24,36,48], index=1)
-    with c2:
-        start_date = st.date_input("Start Date", value=datetime.now())
-    with c3:
-        go_btn = st.button("Generate Forecast", use_container_width=True)
+def create_weather_summary(forecast_df):
+    """Create a human-readable weather summary"""
+    avg_temp = forecast_df['temperature_2m'].mean()
+    total_rain = forecast_df['precipitation'].sum()
+    conditions = forecast_df['weather_condition'].value_counts()
+    
+    dominant_condition = conditions.index[0] if len(conditions) > 0 else "Clear Sky"
+    
+    summary = f"""
+    The weather will be characterized by **{dominant_condition.lower()}** conditions. 
+    Average temperature will be around **{avg_temp:.1f}°C** with **{total_rain:.1f} mm** of total precipitation.
+    """
+    
+    if total_rain > 5:
+        summary += " Expect wet conditions throughout the period."
+    elif avg_temp > 25:
+        summary += " Warm conditions expected."
+    elif avg_temp < 10:
+        summary += " Cool conditions expected."
+        
+    return summary
 
-    if not go_btn:
-        display_sample_layout()
-        return
-
-    with st.spinner("Generating realistic weather forecast..."):
-        start_datetime = datetime.combine(start_date, datetime.now().time())
-        pred = predictor.generate_realistic_predictions(hist, hrs, start_datetime)
-        if pred is not None:
-            display_prediction_dashboard(pred)
-
-def display_sample_layout():
-    st.info("Click 'Generate Forecast' to see detailed predictions")
-    predictor = RealisticWeatherPredictor()
-    hist = load_historical_data()
-    patterns_learned = predictor.pattern_learner.learn_patterns_from_data(hist)
-    if patterns_learned:
-        st.success("Atmospheric patterns learned from historical data")
-    else:
-        st.warning("Using baseline prediction patterns")
-    if hasattr(predictor.pattern_learner, 'monthly_patterns'):
-        months = list(range(1, 13))
-        avg_temps = [predictor.pattern_learner.monthly_patterns[('temperature_2m', 'mean')].get(m, 18) for m in months]
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=months, y=avg_temps, name='Average Temperature', line=dict(width=3)))
-        fig.update_layout(title="Learned Monthly Temperature Pattern", xaxis_title="Month", yaxis_title="Temperature (°C)", height=400, margin=dict(t=60))
-        st.plotly_chart(fig, use_container_width=True)
-
-def display_prediction_dashboard(pred):
-    st.markdown("<div class='section-header'>Forecast Summary</div>", unsafe_allow_html=True)
-    cols = st.columns(4)
-    data = [
-        ("High/Low", f"{pred['temperature_2m'].max():.1f}°/{pred['temperature_2m'].min():.1f}°"),
-        ("Total Rain", f"{pred['precipitation'].sum():.1f} mm"),
-        ("Max Wind", f"{pred['wind_speed_10m'].max():.1f} km/h"),
-        ("Rain Hours", f"{len(pred[pred['precipitation']>0.1])}")
-    ]
-    for col, (lbl,val) in zip(cols, data):
-        with col:
-            st.metric(lbl, val)
-
-    st.markdown("<div class='section-header'>Interactive Forecast Charts</div>", unsafe_allow_html=True)
-    fig = make_subplots(rows=2, cols=2, subplot_titles=('Temperature Trend','Precipitation','Wind Speed','Humidity'), vertical_spacing=0.15)
-    fig.add_trace(go.Scatter(x=pred['time'], y=pred['temperature_2m'], name='Temperature', line=dict(width=3)), row=1, col=1)
-    fig.add_trace(go.Bar(x=pred['time'], y=pred['precipitation'], name='Precipitation'), row=1, col=2)
-    fig.add_trace(go.Scatter(x=pred['time'], y=pred['wind_speed_10m'], name='Wind Speed', line=dict(width=3)), row=2, col=1)
-    fig.add_trace(go.Scatter(x=pred['time'], y=pred['relative_humidity_2m'], name='Humidity', line=dict(width=3)), row=2, col=2)
-    fig.update_layout(height=600, showlegend=False, margin=dict(t=60))
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("<div class='section-header'>Detailed Hourly Forecast</div>", unsafe_allow_html=True)
-    d = pred.copy()
-    d['Time'] = d['time'].dt.strftime('%Y-%m-%d %H:%M')
-    d['Condition'] = d['weather_condition']
-    d['Temp'] = d['temperature_2m']
-    d['Rain'] = d['precipitation']
-    d['Wind'] = d['wind_speed_10m']
-    st.dataframe(d[['Time','Condition','Temp','Rain','Wind']].head(12), use_container_width=True, hide_index=True)
-
-def show_historical_analysis():
-    st.markdown("## Historical Weather Analysis")
-    st.markdown("<div class='section-header'>Data Selection</div>", unsafe_allow_html=True)
-    try:
-        hist_data = load_historical_data()
-        if hist_data is not None and len(hist_data) > 0:
-            st.success(f"Loaded {len(hist_data)} historical records")
-            col1, col2 = st.columns(2)
-            with col1:
-                min_date = hist_data['time'].min().date()
-                max_date = hist_data['time'].max().date()
-                start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
-            with col2:
-                end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
-            mask = (hist_data['time'].dt.date >= start_date) & (hist_data['time'].dt.date <= end_date)
-            filtered_data = hist_data[mask]
-            if len(filtered_data) > 0:
-                st.info(f"Showing {len(filtered_data)} records from {start_date} to {end_date}")
-                predictor = RealisticWeatherPredictor()
-                patterns_learned = predictor.pattern_learner.learn_patterns_from_data(filtered_data)
-                if patterns_learned:
-                    st.success("Patterns analyzed from selected historical data")
-                st.markdown("<div class='section-header'>Summary Statistics</div>", unsafe_allow_html=True)
-                cols = st.columns(4)
-                with cols[0]:
-                    avg_temp = filtered_data['temperature_2m'].mean()
-                    st.metric("Average Temperature", f"{avg_temp:.1f}°C")
-                with cols[1]:
-                    total_rain = filtered_data['precipitation'].sum()
-                    st.metric("Total Precipitation", f"{total_rain:.1f} mm")
-                with cols[2]:
-                    max_wind = filtered_data['wind_speed_10m'].max()
-                    st.metric("Max Wind Speed", f"{max_wind:.1f} km/h")
-                with cols[3]:
-                    avg_humidity = filtered_data['relative_humidity_2m'].mean()
-                    st.metric("Average Humidity", f"{avg_humidity:.1f}%")
-                st.markdown("<div class='section-header'>Historical Trends</div>", unsafe_allow_html=True)
-                fig_temp = px.line(filtered_data, x='time', y='temperature_2m', title='Temperature Trend Over Time')
-                fig_temp.update_layout(height=400)
-                st.plotly_chart(fig_temp, use_container_width=True)
-                col1, col2 = st.columns(2)
-                with col1:
-                    fig_precip = px.bar(filtered_data, x='time', y='precipitation', title='Precipitation Over Time')
-                    fig_precip.update_layout(height=300)
-                    st.plotly_chart(fig_precip, use_container_width=True)
-                with col2:
-                    fig_wind = px.line(filtered_data, x='time', y='wind_speed_10m', title='Wind Speed Over Time')
-                    fig_wind.update_layout(height=300)
-                    st.plotly_chart(fig_wind, use_container_width=True)
-                st.markdown("<div class='section-header'>Monthly Analysis</div>", unsafe_allow_html=True)
-                monthly_data = filtered_data.copy()
-                monthly_data['month'] = monthly_data['time'].dt.month
-                monthly_avg = monthly_data.groupby('month').agg({
-                    'temperature_2m': 'mean',
-                    'precipitation': 'sum',
-                    'wind_speed_10m': 'mean'
-                }).reset_index()
-                col1, col2 = st.columns(2)
-                with col1:
-                    fig_month_temp = px.bar(monthly_avg, x='month', y='temperature_2m', title='Average Temperature by Month')
-                    st.plotly_chart(fig_month_temp, use_container_width=True)
-                with col2:
-                    fig_month_rain = px.bar(monthly_avg, x='month', y='precipitation', title='Total Precipitation by Month')
-                    st.plotly_chart(fig_month_rain, use_container_width=True)
-                st.markdown("<div class='section-header'>Historical Data</div>", unsafe_allow_html=True)
-                display_data = filtered_data.copy()
-                display_data['Date'] = display_data['time'].dt.strftime('%Y-%m-%d %H:%M')
-                display_cols = ['Date', 'temperature_2m', 'precipitation', 'wind_speed_10m', 'relative_humidity_2m']
-                display_cols = [col for col in display_cols if col in display_data.columns]
-                st.dataframe(display_data[display_cols].rename(columns={
-                    'temperature_2m': 'Temperature (°C)',
-                    'precipitation': 'Precipitation (mm)',
-                    'wind_speed_10m': 'Wind Speed (km/h)',
-                    'relative_humidity_2m': 'Humidity (%)'
-                }), use_container_width=True, height=300)
-            else:
-                st.warning("No data available for the selected date range.")
-        else:
-            st.warning("No historical data available. Using sample data for demonstration.")
-            display_sample_historical_analysis()
-    except Exception as e:
-        st.error(f"Error loading historical data: {e}")
-        st.info("Displaying sample historical analysis")
-        display_sample_historical_analysis()
-
-def display_sample_historical_analysis():
-    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
-    sample_data = pd.DataFrame({
-        'time': dates,
-        'temperature_2m': 15 + 10*np.sin(2*np.pi*dates.dayofyear/365) + np.random.normal(0, 3, len(dates)),
-        'precipitation': np.random.exponential(0.5, len(dates)),
-        'wind_speed_10m': 5 + 3*np.random.random(len(dates)),
-        'relative_humidity_2m': 60 + 20*np.random.random(len(dates))
-    })
-    st.info("Sample Historical Analysis (using generated data)")
-    st.markdown("<div class='section-header'>Summary Statistics</div>", unsafe_allow_html=True)
-    cols = st.columns(4)
-    with cols[0]:
-        avg_temp = sample_data['temperature_2m'].mean()
-        st.metric("Average Temperature", f"{avg_temp:.1f}°C")
-    with cols[1]:
-        total_rain = sample_data['precipitation'].sum()
-        st.metric("Total Precipitation", f"{total_rain:.1f} mm")
-    with cols[2]:
-        max_wind = sample_data['wind_speed_10m'].max()
-        st.metric("Max Wind Speed", f"{max_wind:.1f} km/h")
-    with cols[3]:
-        avg_humidity = sample_data['relative_humidity_2m'].mean()
-        st.metric("Average Humidity", f"{avg_humidity:.1f}%")
-    fig_temp = px.line(sample_data, x='time', y='temperature_2m', title='Sample Temperature Trend')
-    st.plotly_chart(fig_temp, use_container_width=True)
-
+# ==================== MAIN APP ====================
 def main():
+    # Header
+    st.markdown("<div class='header-title'>Kathmandu Weather Forecasting System</div>", unsafe_allow_html=True)
+    st.markdown("<div class='header-subtitle'>AI-Powered Weather Prediction & Analytics Dashboard</div>", unsafe_allow_html=True)
+    
+    # Initialize components
+    predictor = AdvancedWeatherPredictor()
+    hist_data = load_historical_data()
+    
+    # Store in session state for persistence
+    st.session_state.historical_data = hist_data
+
+    # Sidebar
     with st.sidebar:
-        st.title("Navigation")
-        page = st.radio("Choose a page:", 
-                       ["Dashboard", 
-                        "Hourly Forecast", 
-                        "Historical Analysis"],
-                       index=0)
+        st.markdown("<h3 style='color:#3b82f6; margin-bottom: 2rem;'> Navigation</h3>", unsafe_allow_html=True)
+        page = st.radio("Select Page", 
+                       [" Dashboard", " Detailed Forecast", " Historical Analysis", " About"],
+                       label_visibility="collapsed")
+        
+        st.markdown("---")
+        st.markdown("###  Location Info")
+        st.write("**City**: Kathmandu Valley")
+        st.write("**Coordinates**: 27.7172°N, 85.3240°E")
+        st.write("**Elevation**: 1,293 meters")
+        st.write("**Current Time**:", datetime.now().strftime("%d %B %Y, %H:%M"))
+        
+        st.markdown("---")
+        st.markdown("###  Settings")
+        if page == " Detailed Forecast":
+            hours = st.slider("Forecast Hours", 6, 168, 24, help="Select number of hours to forecast")
+            st.session_state.forecast_hours = hours
+        
+        st.markdown("---")
+        st.markdown("<div class='data-source'>Data Source: Open-Meteo API & Historical Records</div>", unsafe_allow_html=True)
 
-    if page == "Dashboard":
-        display_current_weather()
-        st.container()
-        st.markdown("### Welcome to Weather Prediction System")
-        st.write("A weather prediction system for Kathmandu, Nepal using machine learning models trained on historical weather data.")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.info("""
-            **Features**
-            - Real-time weather monitoring
-            - Pattern-based accurate forecasts
-            - Weather condition prediction
-            - Interactive visualizations
-            """)
-        with c2:
-            st.info("""
-            **Capabilities**
-            - 12-48 hour forecasts
-            - Temperature trends
-            - Precipitation prediction
-            - Wind speed analysis
-            """)
+    # ==================== DASHBOARD PAGE ====================
+    if page == " Dashboard":
+        current = get_current_weather()
+        
+        # Current Weather Metrics
+        st.markdown("<div class='section-header'>Current Weather Conditions</div>", unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-value'>{current['temperature_2m']:.1f}°C</div>
+                <div class='metric-label'>Temperature</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-value'>{current['relative_humidity_2m']:.0f}%</div>
+                <div class='metric-label'>Humidity</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-value'>{current['wind_speed_10m']:.1f} km/h</div>
+                <div class='metric-label'>Wind Speed</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-value'>{current['surface_pressure']:.0f} hPa</div>
+                <div class='metric-label'>Pressure</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Quick Forecast
+        st.markdown("<div class='section-header'>Next 24-Hour Outlook</div>", unsafe_allow_html=True)
+        
+        with st.spinner("Generating quick forecast..."):
+            quick_forecast = predictor.generate_forecast(hist_data, hours=24)
+        
+        # Display weather alerts
+        alerts = get_weather_alerts(quick_forecast)
+        if alerts:
+            for alert in alerts:
+                st.markdown(f'<div class="weather-alert">{alert}</div>', unsafe_allow_html=True)
+        
+        # Forecast cards in rows of 6
+        st.markdown("#### Hourly Forecast")
+        for i in range(0, min(24, len(quick_forecast)), 6):
+            cols = st.columns(6)
+            for j, col in enumerate(cols):
+                if i + j < len(quick_forecast):
+                    row = quick_forecast.iloc[i + j]
+                    with col:
+                        st.markdown(f"""
+                        <div class='forecast-card'>
+                            <div style='font-weight:600; color:#1e40af; font-size:1.1rem;'>{row['time'].strftime('%H:%M')}</div>
+                            <div style='font-size:0.9rem; color:#64748b;'>{row['time'].strftime('%a')}</div>
+                            <div class='condition-badge'>{row['weather_condition']}</div>
+                            <div style='margin-top:12px; font-size:0.95rem;'>
+                                <div> {row['temperature_2m']:.1f}°C</div>
+                                <div> {row['precipitation']:.1f}mm</div>
+                                <div> {row['wind_speed_10m']:.1f} km/h</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+        
+        # Comfort Index Chart
+        st.markdown("<div class='section-header'>Comfort Index</div>", unsafe_allow_html=True)
+        fig_comfort = px.area(quick_forecast, x='time', y='comfort_index',
+                             title="Temperature-Humidity-Wind Comfort Index",
+                             labels={'comfort_index': 'Comfort Index (0-100)', 'time': 'Time'})
+        fig_comfort.update_layout(height=400)
+        st.plotly_chart(fig_comfort, use_container_width=True)
 
-    elif page == "Hourly Forecast":
-        show_hourly_predictions()
+    # ==================== DETAILED FORECAST PAGE ====================
+    elif page == " Detailed Forecast":
+        st.markdown("<div class='section-header'>Advanced Weather Forecast</div>", unsafe_allow_html=True)
+        
+        # Forecast controls
+        col1, col2, col3 = st.columns([2,1,1])
+        with col1:
+            hours = st.slider("Forecast Duration (hours)", 6, 168, 24, key="detail_forecast_hours")
+        with col2:
+            include_comfort = st.checkbox("Comfort Index", value=True)
+        with col3:
+            st.write("")  # Spacer
+            if st.button(" Generate Forecast", use_container_width=True):
+                with st.spinner("Generating advanced forecast..."):
+                    forecast_data = predictor.generate_forecast(hist_data, hours=hours)
+                    st.session_state.current_forecast = forecast_data
+                    st.session_state.forecast_generated = True
+                    st.success(f" Forecast generated for {hours} hours!")
+        
+        if st.session_state.forecast_generated and st.session_state.current_forecast is not None:
+            df = st.session_state.current_forecast
+            
+            # Weather Summary
+            st.markdown("####  Forecast Summary")
+            summary = create_weather_summary(df)
+            st.info(summary)
+            
+            # Key Metrics
+            st.markdown("####  Key Forecast Metrics")
+            m1, m2, m3, m4, m5 = st.columns(5)
+            with m1: st.metric("Max Temp", f"{df['temperature_2m'].max():.1f}°C")
+            with m2: st.metric("Min Temp", f"{df['temperature_2m'].min():.1f}°C")
+            with m3: st.metric("Total Rain", f"{df['precipitation'].sum():.1f} mm")
+            with m4: st.metric("Max Wind", f"{df['wind_speed_10m'].max():.1f} km/h")
+            with m5: st.metric("Avg Humidity", f"{df['relative_humidity_2m'].mean():.0f}%")
+            
+            # Interactive Charts
+            st.markdown("####  Detailed Forecast Charts")
+            
+            # Create subplots based on selections
+            if include_comfort:
+                fig = make_subplots(rows=3, cols=2, 
+                                  subplot_titles=("Temperature (°C)", "Precipitation (mm/h)", 
+                                                "Wind Speed (km/h)", "Humidity (%)", 
+                                                "Cloud Cover (%)", "Comfort Index"))
+                
+                fig.add_trace(go.Scatter(x=df['time'], y=df['temperature_2m'], name="Temp", 
+                                       line=dict(width=3, color='#EF553B')), row=1, col=1)
+                fig.add_trace(go.Bar(x=df['time'], y=df['precipitation'], name="Rain", 
+                                   marker_color='#636EFA'), row=1, col=2)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['wind_speed_10m'], name="Wind", 
+                                       line=dict(width=3, color='#00CC96')), row=2, col=1)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['relative_humidity_2m'], name="Humidity", 
+                                       line=dict(width=3, color='#AB63FA')), row=2, col=2)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['cloud_cover'], name="Cloud", 
+                                       line=dict(width=3, color='#FFA15A')), row=3, col=1)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['comfort_index'], name="Comfort", 
+                                       line=dict(width=3, color='#19D3F3')), row=3, col=2)
+            else:
+                fig = make_subplots(rows=2, cols=3,
+                                  subplot_titles=("Temperature (°C)", "Precipitation (mm/h)", "Wind Speed (km/h)",
+                                                "Humidity (%)", "Cloud Cover (%)", "Pressure (hPa)"))
+                
+                fig.add_trace(go.Scatter(x=df['time'], y=df['temperature_2m'], name="Temp",
+                                       line=dict(width=3, color='#EF553B')), row=1, col=1)
+                fig.add_trace(go.Bar(x=df['time'], y=df['precipitation'], name="Rain",
+                                   marker_color='#636EFA'), row=1, col=2)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['wind_speed_10m'], name="Wind",
+                                       line=dict(width=3, color='#00CC96')), row=1, col=3)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['relative_humidity_2m'], name="Humidity",
+                                       line=dict(width=3, color='#AB63FA')), row=2, col=1)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['cloud_cover'], name="Cloud",
+                                       line=dict(width=3, color='#FFA15A')), row=2, col=2)
+                fig.add_trace(go.Scatter(x=df['time'], y=df['pressure_msl'], name="Pressure",
+                                       line=dict(width=3, color='#FF6692')), row=2, col=3)
+            
+            fig.update_layout(height=800, showlegend=True, title_text="Comprehensive Weather Forecast")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Data Table
+            st.markdown("####  Detailed Data Table")
+            display_df = df.copy()
+            display_df['time'] = display_df['time'].dt.strftime("%Y-%m-%d %H:%M")
+            display_df = display_df[['time', 'temperature_2m', 'precipitation', 'wind_speed_10m',
+                                   'relative_humidity_2m', 'cloud_cover', 'pressure_msl', 'weather_condition']]
+            display_df.columns = ['Time', 'Temp (°C)', 'Rain (mm)', 'Wind (km/h)', 
+                                'Humidity (%)', 'Cloud (%)', 'Pressure (hPa)', 'Condition']
+            
+            st.dataframe(display_df.style.format({
+                'Temp (°C)': '{:.1f}', 'Rain (mm)': '{:.2f}', 'Wind (km/h)': '{:.1f}',
+                'Humidity (%)': '{:.0f}', 'Cloud (%)': '{:.0f}', 'Pressure (hPa)': '{:.1f}'
+            }), use_container_width=True, height=400)
+            
+            # Download Section
+            st.markdown("####  Download Forecast")
+            csv = df.to_csv(index=False)
+            st.download_button(" Download Full Forecast (CSV)", csv, 
+                             f"kathmandu_forecast_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", 
+                             "text/csv")
 
-    elif page == "Historical Analysis":
-        show_historical_analysis()
+    # ==================== HISTORICAL ANALYSIS PAGE ====================
+    elif page == " Historical Analysis":
+        st.markdown("<div class='section-header'>Historical Weather Analysis</div>", unsafe_allow_html=True)
+        
+        df = hist_data.copy()
+        
+        # Statistics
+        st.markdown("####  Dataset Overview")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1: st.metric("Total Records", f"{len(df):,}")
+        with col2: st.metric("Date Range", f"{df['time'].min().strftime('%d %b %Y')} to {df['time'].max().strftime('%d %b %Y')}")
+        with col3: st.metric("Avg Temperature", f"{df['temperature_2m'].mean():.1f}°C")
+        with col4: st.metric("Total Rainfall", f"{df['precipitation'].sum():.1f} mm")
+        
+        # Time period selection
+        st.markdown("####  Historical Trends")
+        col1, col2 = st.columns(2)
+        with col1:
+            period = st.selectbox("Analysis Period", 
+                                ["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Full dataset"])
+        with col2:
+            variable = st.selectbox("Variable to Analyze", 
+                                  ["temperature_2m", "precipitation", "wind_speed_10m", "relative_humidity_2m"])
+        
+        # Filter data based on selection
+        if period == "Last 7 days":
+            plot_data = df.tail(168)  # 7 days * 24 hours
+        elif period == "Last 30 days":
+            plot_data = df.tail(720)  # 30 days * 24 hours
+        elif period == "Last 90 days":
+            plot_data = df.tail(2160)  # 90 days * 24 hours
+        elif period == "Last year":
+            plot_data = df.tail(8760)  # 365 days * 24 hours
+        else:
+            plot_data = df
+        
+        # Create historical plot
+        fig_hist = px.line(plot_data, x='time', y=variable,
+                          title=f"Historical {variable.replace('_', ' ').title()} - {period}",
+                          labels={variable: variable.replace('_', ' ').title(), 'time': 'Date'})
+        fig_hist.update_layout(height=500)
+        st.plotly_chart(fig_hist, use_container_width=True)
+        
+        # Monthly averages
+        st.markdown("####  Monthly Climate Patterns")
+        monthly_data = df.copy()
+        monthly_data['month'] = monthly_data['time'].dt.month
+        monthly_avg = monthly_data.groupby('month').agg({
+            'temperature_2m': 'mean',
+            'precipitation': 'sum',
+            'wind_speed_10m': 'mean'
+        }).reset_index()
+        
+        fig_monthly = make_subplots(rows=1, cols=3, subplot_titles=("Average Temperature", "Total Precipitation", "Average Wind Speed"))
+        fig_monthly.add_trace(go.Scatter(x=monthly_avg['month'], y=monthly_avg['temperature_2m'], 
+                                       name="Temperature", line=dict(width=3)), row=1, col=1)
+        fig_monthly.add_trace(go.Bar(x=monthly_avg['month'], y=monthly_avg['precipitation'], 
+                                   name="Precipitation"), row=1, col=2)
+        fig_monthly.add_trace(go.Scatter(x=monthly_avg['month'], y=monthly_avg['wind_speed_10m'], 
+                                       name="Wind Speed", line=dict(width=3)), row=1, col=3)
+        fig_monthly.update_layout(height=400, showlegend=False)
+        st.plotly_chart(fig_monthly, use_container_width=True)
+
+    # ==================== ABOUT PAGE ====================
+    else:
+        st.markdown("<div class='section-header'>About This Dashboard</div>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        ###  Kathmandu Weather Forecasting System
+        
+        This advanced weather dashboard provides real-time weather monitoring, AI-powered forecasting, 
+        and historical analysis for the Kathmandu Valley region.
+        
+        ####  Features
+        
+        - **Real-time Monitoring**: Current weather conditions with live updates
+        - **AI Forecasting**: Machine learning-powered weather predictions
+        - **Historical Analysis**: Long-term weather pattern visualization
+        - **Comfort Index**: Temperature-humidity-wind comfort calculations
+        - **Weather Alerts**: Automated severe weather notifications
+        
+        ####  Data Sources
+        
+        - **Live Data**: Open-Meteo Weather API
+        - **Historical Data**: Local weather station records
+        - **Forecast Models**: Ensemble machine learning algorithms
+        
+        ####  Technical Implementation
+        
+        - **Backend**: Python with scikit-learn models
+        - **Frontend**: Streamlit interactive dashboard
+        - **Visualization**: Plotly charts and graphs
+        - **Data Processing**: Pandas for time series analysis
+        
+        ####  Coverage Area
+        
+        - **City**: Kathmandu Metropolitan City
+        - **Coordinates**: 27.7172°N, 85.3240°E  
+        - **Elevation**: 1,293 meters above sea level
+        - **Climate**: Subtropical highland climate
+        
+        For questions or issues, please contact the development team.
+        """)
+        
+        st.markdown("---")
+        st.markdown("<div class='data-source'>Developed with ❤️ for Kathmandu Valley</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
