@@ -1,7 +1,4 @@
 # train_weather_model_trend.py
-# Trains ONLY on your real CSV → predicts TODAY onwards perfectly
-# No lag features → works even if data is old
-
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor

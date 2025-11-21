@@ -1,6 +1,4 @@
 # weather_dashboard.py
-# Kathmandu AI Weather — FINAL: 4-Card Grid + Full Historical Chart + Table
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,7 +10,7 @@ from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
-# ====================== PAGE CONFIG ======================
+#PAGE CONFIG
 st.set_page_config(
     page_title="Kathmandu Weather",
     page_icon="logo.png",
@@ -20,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ====================== GORGEOUS CSS ======================
+# GORGEOUS CSS
 st.markdown("""
 <style>
     .main {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; color: white;}
@@ -142,7 +140,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== LOAD MODEL & DATA ======================
+# LOAD MODEL & DATA 
 @st.cache_resource
 def load_model():
     try:
@@ -167,7 +165,7 @@ models = model_data['models']
 feature_cols = model_data['feature_cols']
 historical_df = load_historical()
 
-# ====================== PREDICTOR ======================
+#  PREDICTOR
 class TrendPredictor:
     def predict(self, dt):
         f = {
@@ -200,7 +198,7 @@ class TrendPredictor:
 
 predictor = TrendPredictor()
 
-# ====================== CURRENT WEATHER ======================
+#  CURRENT WEATHER
 def get_current():
     try:
         r = requests.get("https://api.open-meteo.com/v1/forecast", params={
@@ -214,11 +212,11 @@ def get_current():
 
 current = get_current()
 
-# ====================== HEADER ======================
+#  HEADER
 st.markdown("<div class='header-title'>Kathmandu Weather Prediction</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>ML Based • 7-Day Forecast</div>", unsafe_allow_html=True)
 
-# ====================== SIDEBAR ======================
+# SIDEBAR 
 with st.sidebar:
     st.markdown("### Kathmandu Weather Prediction")
     st.markdown("**Location:** Kathmandu Valley")
@@ -231,7 +229,7 @@ with st.sidebar:
 
 start_time = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
-# ====================== DASHBOARD ======================
+# DASHBOARD
 if page == "Dashboard":
     # Current Metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -289,7 +287,7 @@ if page == "Dashboard":
     fig.update_layout(height=480, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0.1)')
     st.plotly_chart(fig, use_container_width=True)
 
-# ====================== DETAILED FORECAST ======================
+# DETAILED FORECAST 
 elif page == "Detailed Forecast":
     st.markdown("<div class='section-header'>Detailed Forecast</div>", unsafe_allow_html=True)
     hours = st.selectbox("Select Duration", [72, 120, 168], format_func=lambda x: f"{x//24} Days")
@@ -311,7 +309,7 @@ elif page == "Detailed Forecast":
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(df.round(2)[['time','temperature_2m','precipitation','relative_humidity_2m','wind_speed_10m','cloud_cover','weather_condition']], use_container_width=True)
 
-# ====================== HISTORICAL TRENDS ======================
+#  HISTORICAL TRENDS 
 elif page == "Historical Trends":
     st.markdown("<div class='section-header'>Complete Historical Weather Trends</div>", unsafe_allow_html=True)
     
@@ -340,7 +338,7 @@ elif page == "Historical Trends":
     st.markdown("### Historical Data Table")
     st.dataframe(data.round(2), use_container_width=True, height=500)
 
-# ====================== ABOUT ======================
+# ABOUT
 elif page == "About":
     st.markdown("# Kathmandu Weather Prediction")
     st.markdown("**Kathmandu AI Weather** is an intelligent weather forecasting system that combines historical data analysis with machine learning to provide accurate weather predictions for the Kathmandu Valley.")
