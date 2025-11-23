@@ -1,4 +1,4 @@
-# train_weather_model_trend.py
+# train_weather_model.py
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 print("Kathmandu AI Weather — Training Trend-Only Model (Real Data Only)")
 print("="*70)
 
-# Load your real CSV
+# Load CSV
 try:
     df = pd.read_csv("open-meteo-27.75N85.50E1293m.csv")
     df['time'] = pd.to_datetime(df['time'])
