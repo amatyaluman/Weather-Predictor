@@ -1,4 +1,4 @@
-# weather_dashboard.py — FINAL PROFESSIONAL VERSION
+# weather_dashboard.py 
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 # PAGE CONFIG
 st.set_page_config(page_title="Kathmandu Weather", page_icon="logo.png", layout="wide", initial_sidebar_state="expanded")
 
-#CSS# GORGEOUS CSS — FINAL: DROPDOWNS 100% NON-TYPEABLE
+#CSS
 st.markdown("""
 <style>
     .main {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; color: white;}
@@ -152,7 +152,6 @@ class TrendPredictor:
 
 predictor = TrendPredictor()
 
-# SPINNER 2: Generating first forecast (only on cold start)
 with st.spinner("Generating fresh 7-day forecast..."):
     @st.cache_data(ttl=1800, show_spinner=False)
     def get_forecast(hours: int):
