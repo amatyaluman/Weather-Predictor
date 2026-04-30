@@ -1,21 +1,12 @@
-# Weather Predictor
+# Clone the repository
+git clone <repository-url>
+cd <project-directory>
 
-A machine learning-based weather prediction application built with Python and Streamlit.  
-It predicts temperature, humidity, and other weather metrics for Kathmandu using historical weather data.
+# Install dependencies
+pip install pandas numpy scikit-learn joblib streamlit
 
-## Features
-- Machine learning forecast for temperature, humidity, and wind speed
-- Dark theme dashboard with Altair visualizations
-- Easy-to-use Streamlit web interface
+# Train the model
+python train_weather_model.py
 
-## Tech Stack
-- Python
-- Pandas
-- Scikit-learn
-- Streamlit
-- Altair
-
-## How to Run
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/amatyaluman/Weather-Predictor.git
+# Launch the dashboard
+streamlit run weather_dashboard.py
